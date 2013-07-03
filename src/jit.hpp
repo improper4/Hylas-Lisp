@@ -1,3 +1,23 @@
+#include <cstdio>
+#include <iostream>
+#include <cstdlib>
+#include <climits>
+#include <cmath>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <csetjmp>
+#include <climits>
+#include <map>
+#include <vector>
+#include <string>
+#include <algorithm>
+#include <exception>
+#include <unistd.h>
+
+#define __STDC_LIMIT_MACROS
+#define __STDC_CONSTANT_MACROS
+
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/ExecutionEngine/JIT.h>
