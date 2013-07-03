@@ -16,14 +16,16 @@
   :version "0.1"
   :author "Fernando Borretti"
   :license "MIT"
-  :depends-on (:c2ffi-cffi)
+  :depends-on ()
   :components ((:module "src"
+                :serial t
                 :components
                 ((:file "utils")
                  (:file "hylas")
+                 (:file "errors")
                  (:file "types")
                  (:file "pat")
-                 ;(:file "core")
+                 (:file "core")
                  (:file "fn")
                  (:file "jit"))))
   :description ""
