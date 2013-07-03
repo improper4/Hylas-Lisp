@@ -341,8 +341,8 @@ namespace Hylas
     }
     else
       out = emitCode(form/*,Top*/);
-    for(unsigned long i = 0; i < master.Persistent.size(); i++)
-      tmp += master.Persistent[i] + "\n";
+    /*for(unsigned long i = 0; i < master.Persistent.size(); i++)
+      tmp += master.Persistent[i] + "\n";*/
     for(unsigned long i = 0; i < master.CodeStack.size(); i++)
       tmp += master.CodeStack[i] + "\n";
     out = "define " + latest_type() + " @entry(){\n" + out + "\nret " + latest_type() + " " + get_current_res() + "\n}";
@@ -360,8 +360,7 @@ namespace Hylas
     ParseAssemblyString(code.assembly.c_str(),master.Program,errors,Context);
 	if(master.debug)
 	{
-	  cerr << "Code:\n" << code.assembly << "\nIR:" << endl;
-	  master.Program->dump();
+	  cerr << "Code:\n" << code.assembly << endl;
 	}
     llvm::Function* entryfn = master.Engine->FindFunctionNamed("entry");
     if(entryfn == NULL)
@@ -377,6 +376,11 @@ namespace Hylas
       nerror("IR Parser Error: ",parser_errors);
     }
     master.Passes.run(*master.Program);
+	if(master.debug)
+	{
+	  cerr << "\nIR:" << endl;
+	  master.Program->dump();
+	}
     return code;
   }
 

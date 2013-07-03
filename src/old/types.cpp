@@ -223,7 +223,7 @@ namespace Hylas
           }
           else
           {
-            string signature = "%" + type_name + "_";
+            string signature = "%" + type_name + "._";
             unsigned long j = 1;
             for(; j < length(form); j++)
             {
@@ -248,6 +248,7 @@ namespace Hylas
                 signature.replace(j,3,"ptr");
               }
             }
+            signature = signature + "_.";
             push(specializeType(&(Generics[i].second),replacements,signature));
             return signature;
           }
@@ -257,7 +258,12 @@ namespace Hylas
     }
     return "void";
   }
-  
+
+  Form* reverseTypeSignature(string signature)
+  {
+	return readString("null");
+  }
+
   bool checkTypeExistence(string name)
   {
     return (isCoreType(name) || isBasicType(name));
@@ -345,7 +351,7 @@ namespace Hylas
       }
     }
     BasicTypes[name] = tmp;
-    //persistentPush("%"+ name + " = type " + tmp.definition);
+    persistentPush("%"+ name + " = type " + tmp.definition);
     push("%"+ name + " = type " + tmp.definition);
     return constant(get_unique_res("i1"),"i1","true");
   }
@@ -424,7 +430,7 @@ namespace Hylas
     }
     type = cutlast(type) + "}";
     BasicTypes[name].definition = type;
-    //persistentPush(out + BasicTypes[name].definition);
+    persistentPush(out + BasicTypes[name].definition);
     push("%"+ name + " = type " + BasicTypes[name].definition);
 	makePrintFunction(name,length(in)-1);
     return constant(get_unique_res("i1"),"i1","true");
