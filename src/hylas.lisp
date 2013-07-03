@@ -2,13 +2,20 @@
   (:use :cl))
 (in-package :hylas)
 
+(declaim (optimize (debug 3) (speed 0)))
+
+;@doc "The variable class represents generalized variables, ie both named variables and registers."
 (defclass variable ()
-  ((type :accessor   type
+  ((type
+   :accessor   type
    :initarg    :type
    :initform   "")
   (reg-type :accessor reg-type
    :initarg :reg-type
    :initform :var)))
+
+(defmethod print-object ((var variable) stream)
+  (format stream "~a,~a" (type var) (reg-type var)))
 
 (defun make-var (type)
   (make-instance 'variable :type type))
@@ -16,7 +23,14 @@
 (defclass scope ()
   ((vars :accessor    vars
    :initarg     :vars
-   :initform    (make-hash-table))))
+   :initform    (make-hash-table :test #'equal))))
+
+(defun print-var (name var)
+  (format nil "~s -> ~a" name var))
+
+(defmethod print-object ((scope scope) stream)
+  (format stream "~{~a~}" (or (loop for name being the hash-keys of (vars scope) using (hash-value var)
+                                        collecting (print-var name var)) (list "[Empty Scope]"))))
 
 (defclass code ()
   ((top
@@ -57,8 +71,10 @@
     :accessor     core
     :initarg      :core
     :initform     '()
-    :documentation "A list of builtin core functions. These may be overloaded."
-    )))
+    :documentation "A list of builtin core functions. These may be overloaded.")))
+
+(defmethod print-object ((code code) stream)
+  (format stream "Register version: ~a~%Stack:~%~{  - ~a~%~}" (res-version code) (stack code)))
 
 (defun copy-code (code)
   (make-instance 'code :top (top code)
@@ -97,9 +113,11 @@
     (var num (make-var type))
     (emit "%~a" num)))
 
-(defun res-type (code &optional (n -1))
+(defun res-type (code &optional (n (res-version code)))
   "Returns the type of the nth register on the current scope, if n is not given, it returns the type of the last register"
-  (type (gethash (princ-to-string (if n n (res-version code))) (vars (car (last (stack code)))))))
+  (aif (gethash (princ-to-string (if n n (res-version code))) (vars (car (last (stack code)))))
+       (type it)
+       (raise code "Could not get type of register ~a~%" n)))
 
 ; Core functions
 
@@ -138,6 +156,7 @@
 ;; This function destructively modifies the `code` object that is passed as its argument, so it should only be used within a call to `append-entry`.
 ;; It returns a copy of the (updated) object, so it can be queried as usual for things like the last register value.
 (defun emit-code (form code &optional &key (in-lambda nil))
+  (format t "Reading form: ~a" form)
   (if (atom form)
     (cond
       ((eql t form)
@@ -151,49 +170,47 @@
           (assign-res (int 64) (constant (int 64) form))))
       ((floatp form)
         (append-entry
-          (assign-res double (constant double form))))
-            ;((stringp form)
-            ;    ...)
-    ((symbolp form)
-     (multiple-value-bind (var pos) (lookup form code))
-     (if var
-       (progn
-                     ;; If we're in a lambda, check whether the symbol comes
-                     ;; from a lexical context other than the local or global
-                     ;; ones
-                     (append-entry code
-                      (memload (type var) (prefix var))))
-       (raise form "Unbound symbol"))))
-        ; Input is a list
-        (let ((fn (car form)))
-          (if (specialp fn code)
-            nil
-            ;;No? Well, user-defined function then
-            (aif (callfn fn (cdr form) code)
-              it
-                  ;; Not that? Then it's part of the normal core
-                  (if (integer-constructorp fn code)
-                    (construct-integer (cdr form) code)
-                    (aif (corep fn code)
-                     (funcall it (cdr form))
-                           ;; Since everything above failed, signal an error
-                           (raise form "No such function"))))))))
+          (assign-res +double+ (constant +double+ form))))
+      ((symbolp form)
+       (multiple-value-bind (var pos) (lookup form code))
+       (if var
+         (progn
+           ;; If we're in a lambda, check whether the symbol comes
+           ;; from a lexical context other than the local or global
+           ;; ones
+           (append-entry code
+             (memload (type var) (prefix var))))
+         (raise form "Unbound symbol"))))
+    (let ((fn (car form)))
+      ;; Input is a list
+      (if (specialp fn code)
+        nil
+        ;;No? Well, user-defined function then
+        (aif (callfn fn (cdr form) code)
+             it
+             ;; Not that? Then it's part of the normal core
+             (if (integer-constructorp fn code)
+                 (construct-integer (cdr form) code)
+                 (aif (corep fn code)
+                      (funcall it (cdr form))
+                      ;; Since everything above failed, signal an error
+                      (raise form "No such function"))))))))
 
 ; core
 
-(defmacro defbuiltin (name &rest code)
-  `(defun ,name (code form)
-    ,@code))
-; errors
+;@doc "Take a symbol, return a reference to the corresponding bultin function"
+(defun builtin (name)
+  (read-from-string (concatenate 'string "builtin-" name)))
 
-(defmacro raise (form msg &rest args)
-  `(error (format nil ,msg ,@args)))
+(defmacro defbuiltin (name &rest code)
+  `(defun ,(builtin (symbol-name name)) (code form)
+   ,@code))
 
 (defun compile-code (form code)
   "Takes a form. Produces global IR"
   (let ((out (emit-code form code)))
     (format nil "~{~A~%~}~%define ~A @entry(){~%~{    ~A~%~}}"
-      (top code) (res-type code) (entry code))))
+      (top out) (res-type out) (entry out))))
 
 (defun jit (form code)
   "Takes a string, tries to compile it. Output format:
@@ -209,10 +226,9 @@
 (defun repl (code)
   (loop (princ (jit (read) code))))
 
-#|(repl (make-instance 'code
-  :special
-  '(("def" #'def)
-    )
-  :core
-  (list)))|#
-
+(defun repl-test ()
+  (repl (make-instance 'code
+   :special
+   '(("def" #'(builtin "def")))
+   :core
+   (list))))
