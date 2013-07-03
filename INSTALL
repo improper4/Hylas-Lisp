@@ -1,5 +1,0 @@
-Right now, just
-
-clang++ src/hylas.cpp -std=c++0x `llvm-config --cxxflags --libs --ldflags` -o hylas
-
-and put the executable anywhere.
