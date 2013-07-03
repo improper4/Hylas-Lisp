@@ -118,6 +118,9 @@
   (format nil "~A~{~A~}" (print-type type) (loop repeat (indirection type)
     collecting "*")))
 
+(defmethod print-object ((type hylas-type) stream)
+  (format stream "~a" (emit-type type)))
+
 (defun match-type (a b)
   (if (equal a b)
     t
@@ -128,9 +131,9 @@
 (defun int (bit-width)
   (scalar (concatenate 'string "i" (princ-to-string bit-width))))
 
-(defconstant half      (scalar "half"))
-(defconstant float     (scalar "float"))
-(defconstant double    (scalar "double"))
-(defconstant fp128     (scalar "fp128"))
-(defconstant x86_fp80  (scalar "x86_f0"))
-(defconstant ppc_fp128 (scalar "ppc_fp128"))
+(defparameter +half+      (scalar "half"))
+(defparameter +float+     (scalar "float"))
+(defparameter +double+    (scalar "double"))
+(defparameter +fp128+     (scalar "fp128"))
+(defparameter +x86-fp80+  (scalar "x86_f0"))
+(defparameter +ppc-fp128+ (scalar "ppc_fp128"))
