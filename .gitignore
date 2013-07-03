@@ -6,8 +6,7 @@
 *.bc
 *.cgi
 *.mdsp
-*.sublime-project
-*.komodoproject
+*.sublime*
 .fuse_hidden*
 *.tmp
 docs/Doxygen/*
@@ -16,3 +15,10 @@ docs/html/*
 test.ll
 *.swp
 *.swo
+*.fasl
+*.dx32fsl
+*.dx64fsl
+*.lx32fsl
+*.lx64fsl
+*.x86f
+
