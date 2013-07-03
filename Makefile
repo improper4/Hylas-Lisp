@@ -11,7 +11,7 @@ backend:
 	$(CXX) src/jit.cpp -o src/libhylas.o $(CXXFLAGS) $(OPT)
 	$(CXX) -shared src/libhylas.o -o src/libhylas.so $(LLVMFLAGS)
 	rm src/libhylas.o
-	# Now libhylas.o can be loaded
+	# Now libhylas.so can be loaded
 
 console: backend
 	#$(CXX) $(SOURCES) -o hylas.o $(CXXFLAGS) $(LLVMFLAGS)
