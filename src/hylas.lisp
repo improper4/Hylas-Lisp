@@ -1,41 +1,45 @@
-(defpackage hylas
-  (:use :cl))
 (in-package :hylas)
+(annot:enable-annot-syntax)
 
 (declaim (optimize (debug 3) (speed 0)))
 
-;@doc "The variable class represents generalized variables, ie both named variables and registers."
-(defclass variable ()
-  ((type
-   :accessor   type
-   :initarg    :type
-   :initform   "")
-  (reg-type :accessor reg-type
-   :initarg :reg-type
-   :initform :var)))
+(defparameter +word+ "i64")
 
-(defmethod print-object ((var variable) stream)
-  (format stream "~a,~a" (type var) (reg-type var)))
+@doc "The variable class represents generalized variables, ie both named
+variables and registers."
+(defclass <variable> ()
+  ((type
+     :accessor   var-type
+     :initarg    :type
+     :initform   "")
+  (reg-type
+    :accessor reg-type
+    :initarg :reg-type
+    :initform :var)))
+
+(defmethod print-object ((var  <variable>) stream)
+  (format stream "~A,~A" (var-type var) (reg-type var)))
 
 (defun make-var (type)
-  (make-instance 'variable :type type))
+  (make-instance ' <variable> :type type))
 
-(defclass scope ()
-  ((vars :accessor    vars
-   :initarg     :vars
-   :initform    (make-hash-table :test #'equal))))
+(defclass <scope> ()
+  ((vars
+     :accessor    vars
+     :initarg     :vars
+     :initform    (make-hash-table :test #'equal))))
 
 (defun print-var (name var)
-  (format nil "~s -> ~a" name var))
+  (format nil "~S -> ~A" name var))
 
-(defmethod print-object ((scope scope) stream)
-  (format stream "~{~a~}" (or (loop for name being the hash-keys of (vars scope) using (hash-value var)
+(defmethod print-object ((scope <scope>) stream)
+  (format stream "~{~&  - ~A~}" (or (loop for name being the hash-keys of (vars scope) using (hash-value var)
                                         collecting (print-var name var)) (list "[Empty Scope]"))))
 
-(defclass code ()
-  ((top
-    :accessor   top
-    :initarg    :top
+(defclass <code> ()
+  ((toplevel
+    :accessor   toplevel
+    :initarg    :toplevel
     :initform   '()
     :documentation "The toplevel/global code.")
   (entry
@@ -48,6 +52,10 @@
     :initarg    :res-version
     :initform   0
     :documentation "The number that is used as the name of result registers.")
+  (string-version
+    :accessor   string-version
+    :initarg    :string-version
+    :initform   0)
   (label-version
     :accessor   label-version
     :initarg    :label-version
@@ -55,43 +63,48 @@
   (stack
     :accessor   stack
     :initarg    :stack
-    :initform   (list (make-instance 'scope))
+    :initform   (list (make-instance '<scope>))
     :documentation "A list of scopes, the first being the global scope. Scopes are added to the end of the list or removed as new lexical contexts are created and exited.")
   (options
     :accessor   options
     :initarg    :options
     :initform   '(:output plain)
     :documentation "A list of options describing the behavior of the compiler, from the type of output so the optimizations that are enabled.")
-  (special
-    :accessor     special
-    :initarg      :special
-    :initform     '()
+  (operators
+    :accessor     operators
+    :initarg      :operators
+    :initform     (make-hash-table :test #'equal)
     :documentation "A list of builtin special forms. These cannot be overloaded, and act as macros on their arguments")
   (core
     :accessor     core
     :initarg      :core
-    :initform     '()
+    :initform     (make-hash-table :test #'equal)
     :documentation "A list of builtin core functions. These may be overloaded.")))
 
-(defmethod print-object ((code code) stream)
-  (format stream "Register version: ~a~%Stack:~%~{  - ~a~%~}" (res-version code) (stack code)))
+(defmethod print-object ((code <code>) stream)
+  (format stream "<code reg-version: ~A, stack:~%~{~A~}>" (res-version code) (stack code)))
 
-(defun copy-code (code)
-  (make-instance 'code :top (top code)
+(defmethod copy-code ((code <code>))
+  (make-instance '<code>
+    :toplevel (toplevel code)
+    :entry (entry code)
     :res-version (res-version code)
+    :string-version (string-version code)
     :label-version (label-version code)
     :stack (stack code)
-    :options (options code)))
+    :options (options code)
+    :operators (operators code)
+    :core (core code)))
 
+@doc "Just a simplification"
 (defmacro emit (ir &rest args)
-  "Just a simplification"
   `(format nil ,ir ,@args))
 
 ; Variables and registers
 
+@doc "Look up a symbol in the scope of a compiler state."
 (defun lookup (symbol code &key (lookup-register nil))
-  "Look up a symbol in the scope of a compiler state."
-  (loop for scope in (reverse (stack code)) 
+  (loop for scope in (reverse (stack code))
     if (and (gethash symbol (vars scope))
       (eql (if lookup-register :reg :var)
        (reg-type (gethash symbol (vars scope)))))
@@ -107,128 +120,39 @@
     `(setf (gethash ,name (vars (car (last (stack code))))) ,variable)
     `(gethash ,name (vars (car (last (stack code)))))))
 
-;; The following function takes a type, and allocates a new register to store a value of that type. Registers within a scope are named `%[0..+Inf]`.
-(defun res (code type)
-  (let ((num (princ-to-string (incf (res-version code)))))
-    (var num (make-var type))
-    (emit "%~a" num)))
+(defmethod res ((code <code>) &optional type)
+  (if type
+      (let ((num (princ-to-string (incf (res-version code)))))
+        (var num (make-var type))
+        (emit "%~A" num))
+      (emit "%~A" (princ-to-string (res-version code)))))
 
+(defun get-string (num)
+  (emit "@__string~A" (princ-to-string num)))
+
+(defmethod new-string ((code <code>))
+  (get-string (incf (string-version code))))
+
+(defmethod current-string ((code <code>))
+  (get-string (string-version code)))
+
+@doc "Returns the type of the nth register on the current scope, if n is not given,
+it returns the type of the last register"
 (defun res-type (code &optional (n (res-version code)))
-  "Returns the type of the nth register on the current scope, if n is not given, it returns the type of the last register"
   (aif (gethash (princ-to-string (if n n (res-version code))) (vars (car (last (stack code)))))
-       (type it)
-       (raise code "Could not get type of register ~a~%" n)))
+       (var-type it)
+       (raise code "Could not get type of register ~A~%" n)))
 
 ; Core functions
 
-(defmacro append-entry (&rest ir)
+(defmacro append-entry (code &rest ir)
   "Append a piece of IR to the code of the entry function."
-  `(let ((code (copy-code code)))
-   (setf (entry code) (append (entry code) (list ,@ir)))
-   code))
+  `(let ((code (copy-code ,code)))
+     (setf (entry code) (append (entry code) (list ,@ir)))
+     code))
 
+@doc "Append of piece of IR to the toplevel (global) code."
 (defmacro append-toplevel (code &rest ir)
-  "Append of piece of IR to the toplevel (global) code.")
-
-(defun assign (left right)
-  "LLVM IR assignment."
-  (emit "~a = ~a" left right))
-
-(defmacro assign-res (type value)
-  `(assign (res code ,type) ,value))
-
-(defun allocate (type)
-  "Allocate enough space for a value on the stack."
-  (emit "allocate ~a" type))
-
-(defun store (type address value)
-  "Store a value of a given type on a given address."
-  (emit "store ~a ~a, ~a* ~a" type value type address))
-
-(defun memload (type source)
-  "Load a value of a given type from an address."
-  (emit "load ~a* ~a" type source))
-
-(defun constant (type value)
-  "A dirty little LLVM hack to emit an immediate value of some type."
-  (emit "select i1 true, ~a ~a, ~a ~a" (emit-type type) value type value))
-
-;; This function destructively modifies the `code` object that is passed as its argument, so it should only be used within a call to `append-entry`.
-;; It returns a copy of the (updated) object, so it can be queried as usual for things like the last register value.
-(defun emit-code (form code &optional &key (in-lambda nil))
-  (format t "Reading form: ~a" form)
-  (if (atom form)
-    (cond
-      ((eql t form)
-        (append-entry
-          (assign-res (int 1) (constant (int 1) "true"))))
-      ((null form)
-        (append-entry
-          (assign-res (int 1) (constant (int 1) "false"))))
-      ((integerp form)
-        (append-entry
-          (assign-res (int 64) (constant (int 64) form))))
-      ((floatp form)
-        (append-entry
-          (assign-res +double+ (constant +double+ form))))
-      ((symbolp form)
-       (multiple-value-bind (var pos) (lookup form code))
-       (if var
-         (progn
-           ;; If we're in a lambda, check whether the symbol comes
-           ;; from a lexical context other than the local or global
-           ;; ones
-           (append-entry code
-             (memload (type var) (prefix var))))
-         (raise form "Unbound symbol"))))
-    (let ((fn (car form)))
-      ;; Input is a list
-      (if (specialp fn code)
-        nil
-        ;;No? Well, user-defined function then
-        (aif (callfn fn (cdr form) code)
-             it
-             ;; Not that? Then it's part of the normal core
-             (if (integer-constructorp fn code)
-                 (construct-integer (cdr form) code)
-                 (aif (corep fn code)
-                      (funcall it (cdr form))
-                      ;; Since everything above failed, signal an error
-                      (raise form "No such function"))))))))
-
-; core
-
-;@doc "Take a symbol, return a reference to the corresponding bultin function"
-(defun builtin (name)
-  (read-from-string (concatenate 'string "builtin-" name)))
-
-(defmacro defbuiltin (name &rest code)
-  `(defun ,(builtin (symbol-name name)) (code form)
-   ,@code))
-
-(defun compile-code (form code)
-  "Takes a form. Produces global IR"
-  (let ((out (emit-code form code)))
-    (format nil "~{~A~%~}~%define ~A @entry(){~%~{    ~A~%~}}"
-      (top out) (res-type out) (entry out))))
-
-(defun jit (form code)
-  "Takes a string, tries to compile it. Output format:
-  fail
-  error-type: Normal Error
-  error-message: ...
-  Alternatively:
-  success
-  [output of the 'print' part of the repl]
-  "
-  (compile-code form code))
-
-(defun repl (code)
-  (loop (princ (jit (read) code))))
-
-(defun repl-test ()
-  (repl (make-instance 'code
-   :special
-   '(("def" #'(builtin "def")))
-   :core
-   (list))))
+  `(let ((code (copy-code ,code)))
+     (setf (toplevel code) (append (toplevel code) (list ,@ir)))
+     code))
