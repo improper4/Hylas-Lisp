@@ -1,152 +1,180 @@
 (in-package :hylas)
+(annot:enable-annot-syntax)
 
-#|
+@document "Defines special forms and code language functions."
 
-In short, the usage is:
+@doc "Please don't look at this code. Just don't. Please forgive me."
+(defmacro extract (form (&rest bindings) &rest code)
+  (let* ((str (make-string-output-stream))
+         (bindings (loop for i from 0 to (1- (length bindings)) collecting
+                     `((code (emit-code (nth ,i ,form) code))
+                       (,(nth i bindings) (res code))
+                       (,(read-from-string
+                           (concatenate 'string
+                             (symbol-name (nth i bindings)) "-type"))
+                         (res-type code)))))
+         (len (length bindings)))
+    (format str "~{(let* ~A~}~{~S~}" bindings code)
+    (dotimes (i len) (write-string ")" str))
+    (read-from-string (get-output-stream-string str))))
 
-´´´lisp
-(extract form (s_1 s_2 s_3 ... s_n)
-    ...code...)
-´´´
+(defparameter *operators* (make-hash-table :test #'equal))
+(defparameter *core* (make-hash-table :test #'equal))
 
-This will bind s_n to the register that holds the result of the n-th element in ´form´,
-and s_n-type to the type of said form.
+(defmacro defbuiltin (table name &rest code)
+  `(setf (gethash ,(format nil "~(~A~)" (symbol-name name)) ,table)
+    #'(lambda (form code) ,@code)))
 
-To emit the code for some arbitrarily long form, and store the registers and their types as a p-list,
-simply:
-
-´´´lisp
-(extract-list form
-    ...code...)
-´´´
-|#
-
-(defun extract-backend (forms bindings code)
-    "Form is a list of forms to be evaluated, bindings is a list of symbols that will be bound to the result of evaluating the forms in order."
-    `(let* ((code (emit-code ,(car forms)))
-        (,(car bindings) (res-version code))
-        (,(read-from-string (concatenate 'string (symbol-name (car bindings)) "-type")) (res-type)))
-    ,@(if (cdr forms)
-        (list (extract-backend (cdr forms) (cdr bindings) code))
-        code)))
-
-(defmacro extract (forms (&rest bindings) &rest code)
-    `(extract-backend ,forms ',bindings ',code))
+(defmacro defop (name &rest code)
+  `(defbuiltin *operators* ,name ,@code))
+(defmacro defcore (name &rest code)
+  `(defbuiltin *core*,name ,@code))
 
 ;; Variables
 
-(defbuiltin def
-    (let ((sym (symbol-name (nth 1 form))))
-        (extract (cddr form) (value)
-            (if (lookup sym)
-                (raise form "Symbol '~a' already defined in the present scope." sym)
-                (progn
-                    (var sym (var res-type))
-                    (append-entry
-                        (assign (emit "%~a" sym) (res))))))))
+(defop def
+  (let ((sym (symbol-name (nth 0 form))))
+    (extract (cdr form) (value)
+      (if (lookup sym code)
+        (raise form "Symbol '~A' already defined in the present scope." sym)
+        (progn
+          (var sym (var value-type))
+          (append-entry code
+            (assign (emit "%~A" sym) (res code value-type))))))))
 
-(defbuiltin global)
+(defop global)
 
-(defbuiltin set)
+(defop set)
 
 ;; Flow Control
 
-(defbuiltin if
-    (extract (test true-branch false-branch)
-        (if (not (boolean? test-type))
-            (error "The type of the test expression to (if) must be i1 (boolean).")
-            (if (match-type true-branch-type false-branch-type)
-                ;match
+(defop if
+  (extract form (test true-branch false-branch)
+    (if (not (booleanp test-type))
+      (raise form "The type of the test expression to (if) must be i1 (boolean).")
+      (if (match true-branch-type false-branch-type)
+          ;match
+          (append-entry code
+            (emit "muh code"))
+          ;no match
+          (raise form "The types of the true and false branches must match")))))
 
-                ;no match
-                (error "The types of the true and false branches must match")))))
-
-(defbuiltin begin
-    (with-new-scope
-        (extract-list)))
+#|(defop begin
+  (with-new-scope
+    (extract-list)))|#
 
 ;; Mathematics
 
 (defmacro generic-twoarg-op (op)
-    `(extract form (first second)
-        (if (match-type first-type second-type)
-            (assign (res first-type) (emit "~a ~a ~a, ~a ~a" ,op first-type first second-type second))
-            (error "Types must match")))
+  `(extract form (first second)
+    (if (match first-type second-type)
+      (append-entry code
+        (assign (res code first-type)
+          (emit "~A ~A ~A, ~A ~A" ,op first-type first second-type second)))
+      (error "Types must match"))))
 
-    (defmacro make-math-operations ()
-        `(progn
-            ,@(loop for operator in '(add fadd sub fsub mul fmul udiv sdiv fdiv urem srem)
-                collecting `(defbuiltin ,operator
-                    (generic-twoarg-op ,(symbol-name operator))))))
-    (make-math-operations)
+(defop add
+  (generic-twoarg-op "add"))
+(defop fadd
+  (generic-twoarg-op "fadd"))
+(defop sub
+  (generic-twoarg-op "sub"))
+(defop fsub
+  (generic-twoarg-op "fsub"))
+(defop mul
+  (generic-twoarg-op "mul"))
+(defop fmul
+  (generic-twoarg-op "fmul"))
+(defop udiv
+  (generic-twoarg-op "udiv"))
+(defop sdiv
+  (generic-twoarg-op "sdiv"))
+(defop fdiv
+  (generic-twoarg-op "fdiv"))
+(defop urem
+  (generic-twoarg-op "urem"))
+(defop srem
+  (generic-twoarg-op "srem"))
+
+#|(defmacro make-math-operations ()
+  `(progn
+    ,@(loop for operator in '(add fadd sub fsub mul fmul udiv sdiv fdiv urem srem)
+      collecting `(defop ,operator
+        (generic-twoarg-op ,(symbol-name operator))))))
+(make-math-operations)|#
 
 
 ;; Bitwise Operations
 
-(defbuiltin shl
-    (generic-twoarg-op "shl"))
-(defbuiltin lshr
-    (generic-twoarg-op "lshr"))
-(defbuiltin ashr
-    (generic-twoarg-op "ashr"))
-(defbuiltin bit-and
-    (generic-twoarg-op "and"))
-(defbuiltin bit-or
-    (generic-twoarg-op "or"))
-(defbuiltin bit-xor
-    (generic-twoarg-op "xor"))
+(defop shl
+  (generic-twoarg-op "shl"))
+(defop lshr
+  (generic-twoarg-op "lshr"))
+(defop ashr
+  (generic-twoarg-op "ashr"))
+(defop bit-and
+  (generic-twoarg-op "and"))
+(defop bit-or
+  (generic-twoarg-op "or"))
+(defop bit-xor
+  (generic-twoarg-op "xor"))
 
-(defbuiltin byte-swap)
-(defbuiltin count-leading-ones)
-(defbuiltin count-trailing-ones)
-(defbuiltin truncate)
-(defbuiltin extend)
-(defbuiltin sextend)
-(defbuiltin zextend)
+(defop byte-swap)
+(defop count-leading-ones)
+(defop count-trailing-ones)
+(defop truncate)
+(defop extend)
+(defop sextend)
+(defop zextend)
 
 ;; Conversion
 
-(defbuiltin ptr->int)
-(defbuiltin int->ptr)
-(defbuiltin bitcast)
-(defbuiltin coerce)
+(defop ptr->int)
+(defop int->ptr)
+(defop bitcast)
+(defop coerce)
 
 ;; Bitfield size
 
-(defbuiltin size)
-(defbuiltin actual-size)
+(defop size)
+(defop actual-size)
 
 ;; Data structures
 
-(defbuiltin structure)
+(defop structure)
 
-(defbuiltin struct-nth)
-(defbuiltin struct-access)
+(defop struct-nth)
+(defop struct-access)
 
-(defbuiltin make-array)
-(defbuiltin global-array)
-(defbuiltin nth-array)
+(defop make-array)
+(defop global-array)
+(defop nth-array)
 
 ;; Memory
 
-(defbuiltin mem-allocate)
-(defbuiltin mem-store)
-(defbuiltin mem-load)
+(defop mem-allocate)
+(defop mem-store)
+(defop mem-load)
 
-(defbuiltin create)
-(defbuiltin reallocate)
-(defbuiltin destroy)
+(defop create)
+(defop reallocate)
+(defop destroy)
 
-(defbuiltin address)
+(defop address)
 
 ;; FFI
 
-(defbuiltin link)
-(defbuiltin foreign)
+(defop link)
+(defop foreign)
 
 ;; LLVM and Assembler
 
-(defbuiltin asm)
-(defbuiltin inline-asm)
-(defbuiltin LLVM)
-(defbuiltin inline-LLVM)
+(defop asm)
+(defop inline-asm)
+(defop LLVM)
+(defop inline-LLVM)
+
+(defparameter initial-code
+  (make-instance '<code>
+   :operators *operators*
+   :core *core*))
