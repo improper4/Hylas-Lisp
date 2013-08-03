@@ -16,17 +16,26 @@
   :version "0.1"
   :author "Fernando Borretti"
   :license "MIT"
-  :depends-on ()
-  :components ((:module "src"
+  :depends-on (:trivial-utf-8
+               :cl-annot
+               :iterate
+               :cffi
+               :cl-gendoc)
+  :serial t
+  :components ((:file "package")
+               (:module "src"
                 :serial t
                 :components
                 ((:file "utils")
+                 (:file "packages")
                  (:file "hylas")
                  (:file "errors")
+                 (:file "reader")
                  (:file "types")
                  (:file "pat")
                  (:file "core")
                  (:file "fn")
+                 (:file "llvm")
                  (:file "jit"))))
   :description ""
   :long-description
