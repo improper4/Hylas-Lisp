@@ -30,3 +30,34 @@
 (defun gep (type ptr &rest indices)
   (emit "getelementptr ~A* ~A ~{~A~#[~:;, ~]~}" type ptr
     (mapcar #'(lambda (idx) (concatenate 'string +word+ " " (princ-to-string idx))) indices)))
+
+;; Bit manipulation
+
+(defun bitop (name type source)
+  (emit "tail call ~A @llvm.~A.~A(~A ~A, i1 true)" type name type type source))
+
+(defun bitop-def (name type &optional bool-modifier)
+  (if bool-modifier
+    (emit "declare ~A @llvm.~A.~A(~A,i1)" type name type type)
+    (emit "declare ~A @llvm.~A.~A(~A)" type name type type)))
+
+;; Conversion
+
+(defun conv (op source from-type to-type)
+  (emit "~A ~A ~A to ~A" op from-type source to-type))
+
+;; declare
+
+#|@doc "Add a declaration of a function, if it doesn't already exist."
+(defmacro with-declare (fn ret-type args &rest code)
+  `(let ((code (append-toplevel code (emit "declare ~A ~A(~{~A~#[~:;, ~]~})"
+                                       ret-type fn args))))
+     ,@code))|#
+
+;; Function calling
+
+(defun call (fn &key ret args (cconv "ccc") tail)
+  (emit "~Acall ~A ~A ~A(~{~A~#[~:;, ~]~})"
+    (if tail "tail " "") cconv ret fn
+    (loop for arg in args collecting
+      (format nil "~A ~A" (nth 1 arg) (nth 0 arg)))))

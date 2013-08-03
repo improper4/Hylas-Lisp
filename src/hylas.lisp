@@ -65,6 +65,14 @@ variables and registers."
     :initarg    :stack
     :initform   (list (make-instance '<scope>))
     :documentation "A list of scopes, the first being the global scope. Scopes are added to the end of the list or removed as new lexical contexts are created and exited.")
+  (packages
+    :accessor   packages
+    :initarg    :packages
+    :initform   (list (create-package :std)))
+  (current-package
+    :accessor   current-package
+    :initarg    :current-package
+    :initform   :std)
   (options
     :accessor   options
     :initarg    :options
@@ -92,6 +100,8 @@ variables and registers."
     :string-version (string-version code)
     :label-version (label-version code)
     :stack (stack code)
+    :packages (packages code)
+    :current-package (current-package code)
     :options (options code)
     :operators (operators code)
     :core (core code)))
@@ -112,8 +122,8 @@ variables and registers."
     (values (gethash symbol (vars scope))
       (position scope (stack code)))))
 
-(defun prefix (pos)
-  (if (eql pos 0) "@" "%"))
+(defun emit-var (var pos)
+  (concatenate 'string (if (eql pos 0) "@" "%") var (princ-to-string pos)))
 
 (defmacro var (name &optional variable)
   (if variable
@@ -145,10 +155,10 @@ it returns the type of the last register"
 
 ; Core functions
 
-(defmacro append-entry (code &rest ir)
+(defmacro append-entry (code ir)
   "Append a piece of IR to the code of the entry function."
   `(let ((code (copy-code ,code)))
-     (setf (entry code) (append (entry code) (list ,@ir)))
+     (setf (entry code) (append (entry code) (if (listp ,ir) ,ir (list ,ir))))
      code))
 
 @doc "Append of piece of IR to the toplevel (global) code."
@@ -156,3 +166,12 @@ it returns the type of the last register"
   `(let ((code (copy-code ,code)))
      (setf (toplevel code) (append (toplevel code) (list ,@ir)))
      code))
+
+@doc "Generate documentation for the compiler."
+(defun docgen ()
+  (gendoc (:output-filename "docs/docs.html"
+           :css "res/css/hylas.css")
+    (:mdf "intro.md")
+    (:mdf "details.md")
+    (:apiref :some-package :another-package)
+    (:mdf "closing.md")))
