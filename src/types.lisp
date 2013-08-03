@@ -1,6 +1,9 @@
 (in-package :hylas)
 (annot:enable-annot-syntax)
 
+(defparameter +float-types+
+  (list "half" "float" "double" "fp128" "x86_f80" "ppc_fp128"))
+
 (defclass <type> ()
   ((docs
    :accessor   docs
@@ -65,12 +68,47 @@
      :initarg :type)
   (size
      :accessor size
-     :initarg :accessor)))
+     :initarg :size)))
+
+(defmethod vector->intrinsic ((vec <vector>))
+  (emit "v~A~A" (size vec) (vector-type vec)))
 
 ;; Some functions on types
 
-(defmethod booleanp ((int <integer>))
-  (eql (width int) 1))
+(defmethod pointer? ((type <type>))
+  (> (indirection type) 1))
+
+(defun integer? (type)
+  (typep type '<integer>))
+
+(defun boolean? (type)
+  (and
+    (typep type '<integer>)
+    (eql (width type) 1)))
+
+(defun float? (type)
+  (and
+    (typep type '<scalar>)
+    (memeber (scalar-type type) +float-types+)))
+
+(defun func? (type)
+  (typep type '<func>))
+
+(defun tuple? (type)
+  (and
+    (typep type '<aggregate>)
+    (not (typep type '<struct>))))
+
+(defun struct? (type)
+  (typep type '<struct>))
+
+(defun vector? (type)
+  (typep type '<vector>))
+
+(defun vector-or? (alt type)
+  (or (typep type alt)
+      (and (typep type '<vector>)
+           (typep (vector-type type) alt))))
 
 @doc "Generate a type object from the form of a type signature."
 (defmethod parse-type (form (code <code>))
@@ -189,5 +227,5 @@ match."
 (defparameter +float+     (scalar "float"))
 (defparameter +double+    (scalar "double"))
 (defparameter +fp128+     (scalar "fp128"))
-(defparameter +x86-fp80+  (scalar "x86_f0"))
+(defparameter +x86-fp80+  (scalar "x86_f80"))
 (defparameter +ppc-fp128+ (scalar "ppc_fp128"))
