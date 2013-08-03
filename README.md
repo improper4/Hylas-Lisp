@@ -44,57 +44,17 @@ Hylas is a statically-typed, [wide-spectrum](http://en.wikipedia.org/wiki/Wide-s
 
 ![Fibonacci benchmarks](http://eudoxia0.github.com/Hylas-Lisp/img/fib.jpg)
 
-# Building
-
-A simple `make` (Or `make console`) will build the default console front-end for Hylas.
-
-If you have the Qt libraries (they are not statically compiled), you can build the Syntagma IDE using `make gui`. Both commands will produce an executable called `hylas.o`.
-
 # Documentation
 
 Documentation on the _language_ is available as a series of [Markdown](http://daringfireball.net/projects/markdown/) files in the `docs` folder, and can be built using Make and [Pandoc](http://johnmacfarlane.net/pandoc/):
 
-```
-$ cd docs
-$ make
+```bash
+$ make doc
 ```
 
 This will generate the HTML files in the `docs/html` folder. Use `make clean` to delete them.
 
 Documentation on the _compiler_ is available as Doxygen comments, the Doxyfile being in the same `docs` folder. A Make recipe (`doxygen`) can be used to build the output into the `docs/Doxygen` folder.
-
-# Types
-
-<table>
-    <tr>
-        <th><strong>Kind</strong></th><th><strong>C/C++</strong></th><th><strong>Hylas</strong></th>
-    </tr>
-    <tr>
-        <td><strong>Integers</strong></td><td><code>char</code>, <code>short</code>, <code>int</code>, <code>long</code>, <code>long long</code>, signed and unsigned.</td>
-        <td>i1, i2, i3... i8388607. (Number indicates the bit-width).<br> Signature is a property of <em>operations</em>, not types.
-        Aliases exist for the most common ones:
-        <ul>
-        <li> <code>bool</code>: i1.</li>
-        <li> <code>char</code>, <code>byte</code>: i8 or i7, depending on the architecture.</li>
-        <li> <code>short</code>: i16.</li>
-        <li> <code>int</code>: i32.</li>
-        <li> <code>long</code>: i64.</li>
-        <li> <code>word</code>: i32 on 32-bit machines, i64 on 64-bit machines (Width of a machine word, to be used like <code>size_t</code>).</li>
-        </ul>
-        </td>
-    </tr>
-    <tr>
-        <td><strong>Floating-Point</strong></td><td><code>float</code>, <code>double</code>, <code>long double</code>.</td>
-		<td><code>half</code>, <code>float</code>, <code>double</code>, <code>fp128</code>, <code>x86_fp80</code>, <code>ppc_fp128</code>.</td>
-    </tr>
-    <tr>
-        <td><strong>Aggregate</strong></td><td><span>Structures (Can be opaque), arrays, pointers and unions. Has void pointers.</td><td>Structures (Can be opaque) and pointers. Arrays are pointers. Doesn't have void pointers, can be implemented through coercion functions.</span></td>
-    </tr>
-    <tr>
-        <td><strong>Standard Library</strong></td><td><code>size_t</code>, <code>FILE*</code>, <code>_Bool</code>.</td>
-		<td><span>Hash Tables, Sequences (Resizable arrays, bound-checked arrays), filesystem-independent Filepath and Process objects...</span></td>
-    </tr>
-</table>
 
 # License
 
