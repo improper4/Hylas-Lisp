@@ -21,6 +21,13 @@
   (incf (indirection type))
   type)
 
+(defclass <generic-type> (<type>)
+  ((type-var :accessor type-var :initarg :type-var))
+  (:documentation "Represents a generic type variable."))
+
+(defun generic (sym)
+  (make-instance '<generic-type> :type-var sym))
+
 (defclass <scalar> (<type>)
   ((type
      :accessor   scalar-type
@@ -39,9 +46,9 @@
   (make-instance '<integer> :width bit-width))
 
 (defclass <func> (<scalar>)
-  ((retval
-     :accessor   retval
-     :initarg    :retval)
+  ((ret
+     :accessor   ret
+     :initarg    :ret)
   (args
     :accessor   args
     :initarg    :args
@@ -135,9 +142,9 @@
           (raise form "Can't unpointer this object"))))
       (fn
         ;function pointer type: (fn retval type_1 type_2 ... type_3)
-        (let ((retval (emit-type (cadr form)))
+        (let ((ret (emit-type (cadr form)))
           (argtypes (mapcar #'emit-type (cddr form))))
-        (make-instance '<func> :retval retval :args argtypes)))
+        (make-instance '<func> :ret ret :args argtypes)))
       (list
         ; anonymous structure type: (list type_1 type_2 ... type_3)
         (let ((types (mapcar #'emit-type (cdr form))))
@@ -152,7 +159,7 @@
       (ret
             ;the return type of a function pointer
             (let ((fn (emit-type (cadr form))))
-              (retval fn)))
+              (ret fn)))
       (args
         ; return the argument list from a function pointer type  as a list of types
         (let ((fn (emit-type (cadr form))))
@@ -177,6 +184,9 @@
 (defmethod print-type ((type <scalar>))
   (scalar-type type))
 
+(defmethod print-type ((type <generic-type>))
+  (format nil "T~(~A~)" (type-var type)))
+
 (defmethod print-type ((type <integer>))
   (format nil "i~A" (width type)))
 
@@ -184,7 +194,8 @@
   (format nil "{~{~A~#[~:;, ~]~}}" (mapcar #'emit-type (types type))))
 
 (defmethod print-type ((type <func>))
-  (format nil "~A(~{~A~#[~:;, ~]~})*" retval (mapcar #'emit-type (types type))))
+  (format nil "~A(~{~A~#[~:;, ~]~})*" (ret type)
+    (mapcar #'emit-type (args type))))
 
 (defmethod print-type ((type <vector>))
   (format nil "<~A x ~A>" (size type) (type type)))
@@ -194,7 +205,7 @@
     collecting "*")))
 
 (defmethod print-object ((type <type>) stream)
-  (format stream "~a" (emit-type type)))
+  (format stream "~A" (emit-type type)))
 
 (defmethod match ((a <scalar>) (b <scalar>))
   (equal (scalar-type a) (scalar-type b)))
