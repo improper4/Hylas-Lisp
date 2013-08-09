@@ -79,15 +79,24 @@ variables and registers."
     :initform   '(:output plain)
     :documentation "A list of options describing the behavior of the compiler, from the type of output so the optimizations that are enabled.")
   (operators
-    :accessor     operators
-    :initarg      :operators
-    :initform     (make-hash-table :test #'equal)
+    :accessor   operators
+    :initarg    :operators
+    :initform   (make-hash-table :test #'equal)
     :documentation "A list of builtin special forms. These cannot be overloaded, and act as macros on their arguments")
   (core
-    :accessor     core
-    :initarg      :core
-    :initform     (make-hash-table :test #'equal)
-    :documentation "A list of builtin core functions. These may be overloaded.")))
+    :accessor   core
+    :initarg    :core
+    :initform   (make-hash-table :test #'equal)
+    :documentation "A list of builtin core functions. These may be overloaded.")
+  (functions
+    :accessor  functions
+    :initarg    :functions
+    :initform   (make-hash-table :test #'equal)
+    :documentation "A hash table of user-defined functions.")
+  (types
+    :accessor   types
+    :initarg    :types
+    :initform   (make-hash-table :test #'equal))))
 
 (defmethod print-object ((code <code>) stream)
   (format stream "<code reg-version: ~A, stack:~%~{~A~}>" (res-version code) (stack code)))
@@ -104,7 +113,9 @@ variables and registers."
     :current-package (current-package code)
     :options (options code)
     :operators (operators code)
-    :core (core code)))
+    :core (core code)
+    :functions (functions code)
+    :types (types code)))
 
 @doc "Just a simplification"
 (defmacro emit (ir &rest args)

@@ -181,6 +181,8 @@
 
           ))))
 
+;;; Emitting types into IR
+
 (defmethod print-type ((type <scalar>))
   (scalar-type type))
 
@@ -207,6 +209,37 @@
 (defmethod print-object ((type <type>) stream)
   (format stream "~A" (emit-type type)))
 
+;;; "Flat printing" of types in a way amenable to function mangling
+
+(defmethod flat-type ((type <scalar>))
+  (print-type type))
+
+(defmethod flat-type ((type <integer>))
+  (print-type type))
+
+@doc "The `_ba_` and `_ea` markers here stand for 'begin aggregate' and 'end
+aggregate'."
+(defmethod flat-type ((type <aggregate>))
+  (format nil "_ba_~{~A.~}_ea_"))
+
+@doc "This is similar to the way LLVM intrinsics are specialized to take vector
+types."
+(defmethod flat-type ((type <vector>))
+  (format nil "v~Ax~A" (size type) (vector-type type)))
+
+(defmethod flat-type ((type <func>))
+  (format nil "_bfn_~A_~{~A~#[~:;.~]~}_efn_" (ret type)
+    (mapcar #'flat-type (args type))))
+
+(defmethod print-flat ((type <type>))
+  (format nil "~A~{~A~}" (flat-type type) (loop repeat (indirection type)
+    collecting ".ptr")))
+
+(defun mangle (fn args)
+  (format nil "~A.~{~A~#[~:;.~]~}" fn (mapcar #'print-flat args)))
+
+;;; Type matching
+
 (defmethod match ((a <scalar>) (b <scalar>))
   (equal (scalar-type a) (scalar-type b)))
 
@@ -228,6 +261,16 @@
 match."
 (defmethod match ((a <type>) (b <type>))
   nil)
+
+;; Programmer input
+
+(defmethod define-type (fn (code <code>)))
+
+(defclass <generic-type> ()
+  ((name :accessor name :initarg :name)
+   (specializations :accessor specializations :initarg :specializations)))
+
+(defmethod define-generic-type (fn (code <code>)))
 
 ;; Builtins
 
