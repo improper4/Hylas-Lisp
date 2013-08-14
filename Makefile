@@ -1,19 +1,33 @@
-CXX = clang++ # >2012 >using gcc
-CXXFLAGS = -c -fpic -std=c++0x -Wall -Wextra -Werror
-OPT = -O0 -g
+CC = `(which clang; which gcc; which cc) | head -n 1`
+CXX = `(which clang++; which g++) | head -n 1`
+LISP = `(which sbcl; which clisp; which cmucl) | head -n 1`
+
+ERRORFLAGS = -Wall -Wextra -Werror
+OPTFLAGS = -O0 -g
 LLVMFLAGS = `llvm-config --cppflags --ldflags --libs core jit native asmparser asmprinter linker`
-SOURCES = UI/console/console.cpp
-MAKELIB = ar -cvq
+
+CFLAGS = -c -fpic $(ERRORFLAGS) $(OPTOPTFLAGS)
+CXXFLAGS = $(CFLAGS) -std=c++0x
+
+DEFINES = -D__STDC_LIMIT_MACROS -D__STDC_CONSTANT_MACROS
+
 default:console
 
 backend:
 	# Compile the helper Hylas<->LLVM interface
-	$(CXX) src/jit.cpp -o src/libhylas.o $(CXXFLAGS) $(OPT)
-	$(CXX) -shared src/libhylas.o -o src/libhylas.so $(LLVMFLAGS)
-	rm src/libhylas.o
+	$(CXX) src/jit.cpp -o libhylas.o $(CXXFLAGS) $(DEFINES)
+	$(CXX) -shared libhylas.o -o libhylas.so $(OPT) $(LLVMFLAGS)
+	rm libhylas.o
 	# Now libhylas.so can be loaded
 
-console: backend
+liblinenoise:
+	# Compiles linenoise.c into liblinenoise.so so it can be loaded from Common Lisp
+	cd include/linenoise
+	$(CC) linenoise.c -o liblinenoise.o $(CFLAGS)
+	$(CC) -shared liblinenoise.o -o liblinenoise.so
+	rm liblinenoise.o
+
+console: backend liblinenoise
 	#$(CXX) $(SOURCES) -o hylas.o $(CXXFLAGS) $(LLVMFLAGS)
 
 gui: backend
@@ -22,7 +36,10 @@ gui: backend
 clean:
 	rm src/libhylas.so
 
+doc:
+	make -C docs/
+
 system:
 	# Symlink the folder Hylas is in with Quicklisp's local-projects folder, to
 	# make Hylas quickloadable as a library
-	ln -s
+	ln -s `pwd` ~/.quicklisp/local-projects/hylas

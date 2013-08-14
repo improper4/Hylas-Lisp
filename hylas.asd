@@ -1,16 +1,19 @@
-#|
-  This file is a part of hylas project.
-  Copyright (c) 2013 Fernando Borretti (eudoxiahp@gmail.com)
-|#
+(defclass makefile (source-file) ())
 
-#|
-  Author: Fernando Borretti (eudoxiahp@gmail.com)
-|#
+(defmethod source-file-type ((c makefile) (s module)) nil)
 
-(in-package :cl-user)
-(defpackage hylas-asd
-  (:use :cl :asdf))
-(in-package :hylas-asd)
+(defmethod output-files ((operation compile-op) (f makefile))
+  (values
+    (list
+      (make-pathname :name "Makefile"
+                     :type nil
+                     :defaults (component-pathname f))) t))
+
+(defmethod perform ((o load-op) (c makefile)) t)
+
+(defmethod perform ((o compile-op) (c makefile))
+  (unless (zerop (run-shell-command "make"))
+    (error 'operation-error :component c :operation o)))
 
 (defsystem hylas
   :version "0.1"
@@ -20,9 +23,11 @@
                :cl-annot
                :iterate
                :cffi
+               :optima
                :cl-gendoc)
   :serial t
   :components ((:file "package")
+               (makefile "Makefile")
                (:module "src"
                 :serial t
                 :components
