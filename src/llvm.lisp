@@ -54,10 +54,17 @@
                                        ret-type fn args))))
      ,@code))|#
 
-;; Function calling
+;; Functions
 
-(defun call (fn &key ret args (cconv "ccc") tail)
+(defun fn-proto (args)
+  (loop for arg in args collecting
+    (format nil "~A ~A" (nth 1 arg) (nth 0 arg))))
+
+(defun define (fn &key ret args tail attrs gc body last)
+  (emit "define ~A @~A(~A) ~{~A ~} ~A {~&~{    ~A~&~}    ret ~A ~A~&}" ret fn
+    (or (fn-proto args) "") (unless attrs (list ""))
+    (if gc (concatenate 'string "gc \"" gc "\"") "") body ret last))
+
+(defun call (fn &key ret args (cconv "") tail)
   (emit "~Acall ~A ~A ~A(~{~A~#[~:;, ~]~})"
-    (if tail "tail " "") cconv ret fn
-    (loop for arg in args collecting
-      (format nil "~A ~A" (nth 1 arg) (nth 0 arg)))))
+    (if tail "tail " "") cconv ret fn (fn-proto args)))

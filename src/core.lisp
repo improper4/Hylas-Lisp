@@ -227,16 +227,10 @@
 
 ;; Data structures
 
-; define i32 @main() {
-;     %1 = insertvalue {double,{i32,i32,i32}} undef, double 3.0, 0
-;     %2 = insertvalue {i32,i32,i32} undef, i32 60, 0
-;     %3 = insertvalue {i32,i32,i32} %2, i32 89, 1
-;     %4 = insertvalue {i32,i32,i32} %3, i32 238, 2
-;     %5 = insertvalue {double,{i32,i32,i32}} %1, {i32,i32,i32} %4, 1
-;     %6 = extractvalue {double,{i32,i32,i32}} %5, 1
-;     %7 = extractvalue {i32,i32,i32} %6, 1 ;; => 89
-;     ret i32 %7
-; }
+(defop type
+  (destructuring-bind (name def) form
+    (append-entry (define-type name def code)
+      (assign-res (int 1) (constant (int 1) "true")))))
 
 (defop tuple
   "Create a tuple from its arguments.
@@ -252,18 +246,16 @@
             (assign (res code tup-type)
                     (emit "insertvalue ~A ~A, ~A ~A, ~A" tup-type
                       (if (eql i 0) "undef" last-reg)
-                      type (nth i extracted-registers)
-                      i))))))))
+                      type (nth i extracted-registers) i))))))))
 
 (defcore nth)
 (defcore access)
 
-(defop make-array)
-(defop global-array)
-
 ;; Function definition and calling
 
-(defop function)
+(defop function
+  (define-function form code))
+
 (defop apply)
 
 ;; Vectors
@@ -288,6 +280,8 @@
 (defop create)
 (defop reallocate)
 (defop destroy)
+
+(defop defmemman)
 
 (defop address)
 (defop fn)

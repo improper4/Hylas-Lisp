@@ -61,6 +61,15 @@
     :initform   '()))
   (:documentation "This describes tuples and structures."))
 
+;;      body
+;;        |
+;;   ___________
+;;  v           v
+;; {S_0,S_1,...,S_n-1,S_n}
+;;  ^   ^-------------^
+;;  |          |      |
+;; first     rest    last
+
 (defun aggregate (types)
   (make-instance '<aggregate> :types types))
 
@@ -124,62 +133,62 @@
     (case (car form)
       (pointer
         ;Increase the indirection level by one or n (integer constant)
-        (let ((type (emit-type (cadr form)))
-          (n (if (caddr form)
-            (caddr form)
-            1)))
-        (incf (indirection type) n)
-        type))
+        (let ((type (parse-type (cadr form)))
+              (n (aif (caddr form) it 1)))
+          (incf (indirection type) n)
+          type))
       (unpointer
-        ;Decrease indirection level by one, or n (integer constant)
-        ;if object is not a pointer, signal an error
-        (let ((type (emit-type (cadr form)))
-          (n (if (caddr form)
-            (caddr form)
-            1)))
-        (decf (indirection type) n)
-        (if (< (indirection type) 0)
-          (raise form "Can't unpointer this object"))))
+        ;; Decrease indirection level by one, or n (integer constant)
+        ;; If object is not a pointer, signal an error
+        (let ((type (parse-type (cadr form)))
+              (n (aif (caddr form) it 1)))
+          (decf (indirection type) n)
+          (if (< (indirection type) 0)
+            (raise form "Can't (unpointer) this object"))
+          (decf (indirection type))
+          type))
       (fn
         ;function pointer type: (fn retval type_1 type_2 ... type_3)
         (let ((ret (emit-type (cadr form)))
           (argtypes (mapcar #'emit-type (cddr form))))
         (make-instance '<func> :ret ret :args argtypes)))
-      (list
-        ; anonymous structure type: (list type_1 type_2 ... type_3)
+      (tuple
+        ;; (tuple type_1 type_2 ... type_3) => {type_1,type_2,...,type_3}
         (let ((types (mapcar #'emit-type (cdr form))))
           (aggregate types)))
       (structure
-        ; named structure
+        ;;(structure (name_1 type_1) ... (name_n type_n)) => {type_1,...,type_n}
 
         )
-      (typeof
+      (type
         ; emit the code for a form, throw away everything by the type
         (res-type (emit-code (cadr form) code)))
       (ret
-            ;the return type of a function pointer
-            (let ((fn (emit-type (cadr form))))
-              (ret fn)))
+        ;the return type of a function pointer
+        (let ((fn (emit-type (cadr form))))
+          (ret fn)))
       (args
-        ; return the argument list from a function pointer type  as a list of types
+        ;; return the argument list from a function pointer type  as a list of
+        ;;types
         (let ((fn (emit-type (cadr form))))
           (aggregate (args fn))))
-        ;Functions to excise the types of list
-        (nth
-
-          )
-        (first
-
-          )
-        (last
-
-          )
-        (tail
-
-          )
-        (body
-
-          ))))
+      ;Functions to excise the types of an aggregate type
+      (nth
+        (let ((type (parse-type (cadr form)))
+              (n (caddr form)))
+          (nth n (types type))))
+      (first
+        (let ((type (parse-type (cadr form))))
+          (first (types type))))
+      (last
+        (let ((type (parse-type (cadr form))))
+          (first (last (types type)))))
+      (rest
+        (let ((type (parse-type (cadr form))))
+          (rest (types type))))
+      (body
+        (let ((type (parse-type (cadr form))))
+          (reverse (rest (reverse (types type)))))))))
 
 ;;; Emitting types into IR
 
@@ -220,7 +229,7 @@
 @doc "The `_ba_` and `_ea` markers here stand for 'begin aggregate' and 'end
 aggregate'."
 (defmethod flat-type ((type <aggregate>))
-  (format nil "_ba_~{~A.~}_ea_"))
+  (format nil "_ba_~{~A.~}_ea_" (types type)))
 
 @doc "This is similar to the way LLVM intrinsics are specialized to take vector
 types."
@@ -229,14 +238,14 @@ types."
 
 (defmethod flat-type ((type <func>))
   (format nil "_bfn_~A_~{~A~#[~:;.~]~}_efn_" (ret type)
-    (mapcar #'flat-type (args type))))
+    (mapcar #'print-flat (args type))))
 
 (defmethod print-flat ((type <type>))
   (format nil "~A~{~A~}" (flat-type type) (loop repeat (indirection type)
     collecting ".ptr")))
 
 (defun mangle (fn args)
-  (format nil "~A.~{~A~#[~:;.~]~}" fn (mapcar #'print-flat args)))
+  (format nil "~A.~{~A~#[~:;. ~]~}" fn (mapcar #'print-flat args)))
 
 ;;; Type matching
 
@@ -264,7 +273,15 @@ match."
 
 ;; Programmer input
 
-(defmethod define-type (fn (code <code>)))
+(defmethod type-exists? (name (code <code>))
+  (gethash name (types code)))
+
+(defmethod define-type (name type (code <code>))
+  (if (type-exists? name code)
+    (error form "A type with that name already exists.")
+    (let ((code (copy-code code)))
+      (setf (gethash name (types code)) type)
+      code)))
 
 (defclass <generic-type> ()
   ((name :accessor name :initarg :name)

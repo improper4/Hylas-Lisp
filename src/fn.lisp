@@ -29,7 +29,7 @@ prototypes."
    (arg-types :accessor arg-types :initarg :arg-types :initform (list nil<))
    (docstring :accessor docstring :initarg :docstring :type string :initform "")
    (tco :accessor tco :initarg :tco :type boolean :initform nil)
-   (cconv :accessor cconc :initarg :cconv :initform :ccc)))
+   (cconv :accessor cconv :initarg :cconv :initform :ccc)))
 
 (defclass <generic-function> (<function>)
   ((specializations :accessor specializations :initarg :specializations)))
@@ -48,6 +48,46 @@ prototypes."
                 0)))
     (concatenate 'string (mangle name args) (princ-to-string n))))
 
-(defmethod define-function (fn (code <code>)))
+(defun parse-function (form)
+  (let ((name (car form))
+        (ret  (cadr form))
+        (args (caddr form))
+        (body (cdddr form)))
+    (list name ret args body)))
+
+(defmethod add-fn-def (name fn (code <code>))
+  (aif (gethash name (functions code))
+    (setf it (append it fn))
+    (setf it (list fn))))
+
+(defmethod define-function (form (code <code>))
+  (destructuring-bind (name ret args body) (parse-function form)
+    (if (fn-exists? name ret args code)
+        (error form "a function with this name and prototype already exists.")
+        (destructuring-bind (opts docs form) (get-meta form)
+          (let ((fn (make-instance '<function> :name name
+                                    :base-name (mangle-fn name args code)
+                                    :ret-type ret
+                                    :arg-types args
+                                    :docstring docs
+                                    :tco (option? "tail" opts)
+                                    :cconv (get-cconv opts))))
+            (add-fn-def name fn code)
+            (format t "~A" body)
+            (let ((fn-code (extract-list body code)))
+              (append-toplevel fn-code
+                (define (base-name fn) :ret ret :args args
+                  :tail (tco fn) :body (entry fn-code) :last (res code)))))))))
 
 (defmethod define-generic-function (fn (code <code>)))
+
+;; Some tools for finding specific options
+
+(defun option? (opt options)
+  t)
+
+(defun option (opt options)
+  )
+
+(defun get-cconv (options)
+  "ccc")
