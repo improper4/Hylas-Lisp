@@ -1,16 +1,7 @@
 #include <cstdlib>
-#include <climits>
-#include <cmath>
-#include <fstream>
-#include <sstream>
 #include <string>
-#include <csetjmp>
-#include <climits>
-#include <map>
 #include <vector>
 #include <string>
-#include <algorithm>
-#include <exception>
 #include <thread>
 
 #include <llvm/IR/DerivedTypes.h>
@@ -37,82 +28,73 @@
 using namespace std;
 using namespace llvm;
 
-struct arch {
-    const char* vendor;
-    const char* model;
-};
-
-LLVMContext& Context = getGlobalContext();
-
-struct Code {
-    Module* program;
-    PassManager passes;
-    ExecutionEngine* engine;
-    Linker* loader;
-    const char* error;
-};
-
-Code* error(Code* code, const char* desc) {
-    code->error = desc;
-    return code;
-}
-
-Code* init() {
-    Code* code = new Code;
-    InitializeNativeTarget();
-    code->program = new Module("Hylas Lisp",Context);
-    code->engine = ExecutionEngine::createJIT(code->program);
-    code->loader = new Linker(code->program);
-    //code->loader->addSystemPaths();
-    code->engine =  EngineBuilder(code->program).create();
-    return code;
-}
-
-void init_optimizer(Code* code) {
-    code->passes.add(createBasicAliasAnalysisPass());
-    code->passes.add(createInstructionCombiningPass());
-    code->passes.add(createReassociatePass());
-    code->passes.add(createGVNPass());
-    code->passes.add(createCFGSimplificationPass());
-    code->passes.add(createAggressiveDCEPass());
-}
-
-Code* jit(Code* code, const char* ir) {
-    SMDiagnostic errors;
-    string parser_errors;
-    ParseAssemblyString(ir,code->program,errors,Context);
-    llvm::Function* entryfn = code->engine->FindFunctionNamed("entry");
-    if(entryfn == NULL)
-      return error(code,"ERROR: Couldn't find program entry point.");
-    if(!errors.getMessage().empty())
-    {
-      entryfn->eraseFromParent();
-      return error(code,errors.getMessage().data());
-    }
-    if(verifyModule(*code->program,ReturnStatusAction,&parser_errors))
-    {
-      entryfn->eraseFromParent();
-      return error(code,parser_errors.data());
-    }
-    code->passes.run(*code->program);
-    return code;
-}
-
-const char* run_entry(Code* code) {
-    llvm::Function* entryfn = code->engine->FindFunctionNamed("entry");
-    if(entryfn == NULL)
-      return NULL; //"Couldn't find program entry point."
-    std::vector<GenericValue> args;
-    GenericValue retval = code->engine->runFunction(entryfn,args);
-    code->engine->freeMachineCodeForFunction(entryfn);
-    entryfn->eraseFromParent();
-    return (const char*)retval.PointerVal;
-}
-
 extern "C" {
+    struct arch {
+        const char* vendor;
+        const char* model;
+    };
+
+    LLVMContext& Context = getGlobalContext();
+
+    struct Code {
+        Module* program;
+        PassManager passes;
+        ExecutionEngine* engine;
+        Linker* loader;
+        const char* error;
+    };
+
+    Code* error(Code* code, const char* desc) {
+        code->error = desc;
+        return code;
+    }
+
+    Code* init_optimizer(Code* code) {
+        code->passes.add(createBasicAliasAnalysisPass());
+        code->passes.add(createInstructionCombiningPass());
+        code->passes.add(createReassociatePass());
+        code->passes.add(createGVNPass());
+        code->passes.add(createCFGSimplificationPass());
+        code->passes.add(createAggressiveDCEPass());
+        return code;
+    }
+
+    Code* backend_init() {
+        Code* code = new Code;
+        InitializeNativeTarget();
+        code->program = new Module("Hylas Lisp",Context);
+        code->engine = ExecutionEngine::createJIT(code->program);
+        code->loader = new Linker(code->program);
+        //code->loader->addSystemPaths();
+        code->engine =  EngineBuilder(code->program).create();
+        return init_optimizer(code);
+    }
+
+    Code* jit_ir(Code* code, const char* ir) {
+        SMDiagnostic errors;
+        string parser_errors;
+        ParseAssemblyString(ir,code->program,errors,Context);
+        Function* entryfn = code->engine->FindFunctionNamed("entry");
+        if(entryfn == NULL)
+          return error(code,"ERROR: Couldn't find program entry point.");
+        if(!errors.getMessage().empty())
+        {
+          entryfn->eraseFromParent();
+          return error(code,errors.getMessage().data());
+        }
+        if(verifyModule(*code->program,ReturnStatusAction,&parser_errors))
+        {
+          entryfn->eraseFromParent();
+          return error(code,parser_errors.data());
+        }
+        code->passes.run(*code->program);
+        return code;
+    }
+
     char link(const char* lib) {
+        using namespace llvm::sys;
         if(lib)
-            return 1;
+            return DynamicLibrary::LoadLibraryPermanently(lib);
         else
             return 0;
     }
@@ -121,8 +103,23 @@ extern "C" {
         return std::thread::hardware_concurrency();
     }
 
-    bool warm_shutdown(Code* code) {
+    const char* run_entry(Code* code) {
+        llvm::Function* entryfn = code->engine->FindFunctionNamed("entry");
+        if(entryfn == NULL)
+          return NULL; //"Couldn't find program entry point."
+        std::vector<GenericValue> args;
+        GenericValue retval = code->engine->runFunction(entryfn,args);
+        code->engine->freeMachineCodeForFunction(entryfn);
+        entryfn->eraseFromParent();
+        return (const char*)retval.PointerVal;
+    }
+
+    char warm_shutdown(Code* code) {
         delete code;
-        return true;
+        return 1;
+    }
+
+    int muhtest() {
+        return 10;
     }
 }

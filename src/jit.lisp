@@ -89,3 +89,26 @@ success
 (defun eval-string (str)
   (with-preserved-case
     (jit (safe-read-from-string str) initial-code)))
+
+;;; Interface to the C++ backend
+
+(cffi:load-foreign-library
+  (namestring
+    (make-pathname :name "libhylas"
+                   :type #+unix "so" #+darwin "dylib" #+windows "dll"
+                   :defaults (asdf::component-relative-pathname
+                               (asdf:find-system :hylas)))))
+
+(cffi:defctype c-code :pointer)
+
+(cffi:defcfun "backend_init" c-code)
+
+(cffi:defcfun "jit_ir" c-code (code c-code ir :pointer))
+
+(cffi:defcfun (link-lib "link") :char (lib :pointer))
+
+(cffi:defcfun "nconcurrent" :int)
+
+(cffi:defcfun "run_entry" :pointer (code c-code))
+
+(cffi:defcfun "warm_shutdown" :char (code c-code))

@@ -3,10 +3,10 @@ CXX = `(which clang++; which g++) | head -n 1`
 LISP = `(which sbcl; which clisp; which cmucl) | head -n 1`
 
 ERRORFLAGS = -Wall -Wextra -Werror
-OPTFLAGS = -O0 -g
+OPTFLAGS = -O4
 LLVMFLAGS = `llvm-config --cppflags --ldflags --libs core jit native asmparser asmprinter linker`
 
-CFLAGS = -c -fpic $(ERRORFLAGS) $(OPTOPTFLAGS)
+CFLAGS = -c -fPIC $(ERRORFLAGS) $(OPTOPTFLAGS)
 CXXFLAGS = $(CFLAGS) -std=c++0x
 
 DEFINES = -D__STDC_LIMIT_MACROS -D__STDC_CONSTANT_MACROS
@@ -20,21 +20,21 @@ backend:
 	rm libhylas.o
 	# Now libhylas.so can be loaded
 
-liblinenoise:
-	# Compiles linenoise.c into liblinenoise.so so it can be loaded from Common Lisp
-	cd include/linenoise
-	$(CC) linenoise.c -o liblinenoise.o $(CFLAGS)
-	$(CC) -shared liblinenoise.o -o liblinenoise.so
-	rm liblinenoise.o
+#liblinenoise:
+#	# Compiles linenoise.c into liblinenoise.so so it can be loaded from Common Lisp
+#	cd include/linenoise
+#	$(CC) linenoise.c -o liblinenoise.o $(CFLAGS)
+#	$(CC) -shared liblinenoise.o -o liblinenoise.so
+#	rm liblinenoise.o
 
-console: backend liblinenoise
+console: backend
 	#$(CXX) $(SOURCES) -o hylas.o $(CXXFLAGS) $(LLVMFLAGS)
 
 gui: backend
 	make -C UI/syntagma
 
 clean:
-	rm src/libhylas.so
+	rm libhylas.so
 
 doc:
 	make -C docs/
