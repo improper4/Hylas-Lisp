@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 #include <thread>
+#include <stdio.h>
 
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
@@ -44,12 +45,18 @@ extern "C" {
         const char* error;
     };
 
-    Code* error(Code* code, const char* desc) {
+    Code* error_code(const char* desc) {
+        Code* code = new Code;
         code->error = desc;
         return code;
     }
 
+    const char* get_error(Code* code) {
+        return code->error;
+    }
+
     Code* init_optimizer(Code* code) {
+
         code->passes.add(createBasicAliasAnalysisPass());
         code->passes.add(createInstructionCombiningPass());
         code->passes.add(createReassociatePass());
@@ -61,6 +68,7 @@ extern "C" {
 
     Code* backend_init() {
         Code* code = new Code;
+        code->error = NULL;
         InitializeNativeTarget();
         code->program = new Module("Hylas Lisp",Context);
         code->engine = ExecutionEngine::createJIT(code->program);
@@ -74,18 +82,17 @@ extern "C" {
         SMDiagnostic errors;
         string parser_errors;
         ParseAssemblyString(ir,code->program,errors,Context);
-        Function* entryfn = code->engine->FindFunctionNamed("entry");
-        if(entryfn == NULL)
-          return error(code,"ERROR: Couldn't find program entry point.");
-        if(!errors.getMessage().empty())
-        {
-          entryfn->eraseFromParent();
-          return error(code,errors.getMessage().data());
+        Function* entryfn = code->program->getFunction(StringRef("entry"));
+        if(entryfn == NULL) {
+            return error_code("ERROR: Couldn't find program entry point.");
         }
-        if(verifyModule(*code->program,ReturnStatusAction,&parser_errors))
-        {
-          entryfn->eraseFromParent();
-          return error(code,parser_errors.data());
+        if(!errors.getMessage().empty()) {
+            entryfn->eraseFromParent();
+            return error_code(errors.getMessage().data());
+        }
+        if(verifyModule(*code->program,ReturnStatusAction,&parser_errors)) {
+            entryfn->eraseFromParent();
+            return error_code(parser_errors.data());
         }
         code->passes.run(*code->program);
         return code;
@@ -114,12 +121,12 @@ extern "C" {
         return (const char*)retval.PointerVal;
     }
 
-    char warm_shutdown(Code* code) {
+    char delete_code(Code* code) {
         delete code;
         return 1;
     }
 
-    int muhtest() {
-        return 10;
+    const char* repeat(const char* in){
+        return in;
     }
 }

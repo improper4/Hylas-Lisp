@@ -33,8 +33,9 @@ variables and registers."
   (format nil "~S -> ~A" name var))
 
 (defmethod print-object ((scope <scope>) stream)
-  (format stream "~{~&  - ~A~}" (or (loop for name being the hash-keys of (vars scope) using (hash-value var)
-                                        collecting (print-var name var)) (list "[Empty Scope]"))))
+  (format stream "~{~&  - ~A~}"
+    (or (loop for name being the hash-keys of (vars scope) using (hash-value var)
+          collecting (print-var name var)) (list "[Empty Scope]"))))
 
 (defclass <code> ()
   ((toplevel

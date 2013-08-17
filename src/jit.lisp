@@ -103,12 +103,21 @@ success
 
 (cffi:defcfun "backend_init" c-code)
 
-(cffi:defcfun "jit_ir" c-code (code c-code ir :pointer))
+(cffi:defcfun "jit_ir" c-code (code c-code) (ir :string))
 
-(cffi:defcfun (link-lib "link") :char (lib :pointer))
+(cffi:defcfun "get_error" :string (code c-code))
+
+(cffi:defcfun (link-lib "link") :char (lib :string))
 
 (cffi:defcfun "nconcurrent" :int)
 
-(cffi:defcfun "run_entry" :pointer (code c-code))
+(cffi:defcfun "run_entry" :string (code c-code))
 
-(cffi:defcfun "warm_shutdown" :char (code c-code))
+(cffi:defcfun "delete_code" :char (code c-code))
+
+(cffi:defcfun "repeat" :string (str :string))
+
+(defun jit (c-code ir)
+  (with-foreign-string (ir ir)
+    (let ((result (jit-ir code ir)))
+      (aif (get-error result) it result))))
