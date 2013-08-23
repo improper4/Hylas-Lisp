@@ -24,7 +24,12 @@
 (defun constant (type value)
   (emit "select i1 true, ~A ~A, ~A ~A" (emit-type type) value type value))
 
-;; More complex LLVM constructs
+;;; More complex LLVM constructs
+
+;; Comparison
+
+(defun cmp (op test type first second)
+  (emit "~A ~A ~A ~A, ~A" op test type first second))
 
 @doc "An ad-hoc, castrated GetElementPtr"
 (defun gep (type ptr &rest indices)
