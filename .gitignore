@@ -1,6 +1,7 @@
 *~
 *.out
 *.o
+*.so
 *.a
 *.s
 *.bc
@@ -21,4 +22,3 @@ test.ll
 *.lx32fsl
 *.lx64fsl
 *.x86f
-

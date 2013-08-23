@@ -23,6 +23,7 @@
                :cl-annot
                :iterate
                :cffi
+               :usocket
                :optima
                :cl-gendoc)
   :serial t
@@ -37,10 +38,11 @@
                  (:file "errors")
                  (:file "reader")
                  (:file "types")
+                 (:file "mem")
                  (:file "pat")
+                 (:file "llvm")
                  (:file "core")
                  (:file "fn")
-                 (:file "llvm")
                  (:file "jit"))))
   :description ""
   :long-description
