@@ -19,7 +19,8 @@ like the last register value."
           (assign-res (int 1) (constant (int 1) "false"))))
       ((integerp form)
         (append-entry code
-          (assign-res (int 64) (constant (int 64) form))))
+          (assign-res (int (min-width form))
+            (constant (int (min-width form)) form))))
       ((floatp form)
         (append-entry code
           (assign-res +double+ (constant +double+ form))))
@@ -51,12 +52,12 @@ like the last register value."
         (aif (callfn fn (cdr form) code)
              it
              ;; Not that? Then it's part of the normal core
-             (if (integer-constructor? fn code)
-                 (construct-integer (cdr form) code)
-                 (aif (core? fn code)
-                      (funcall it (cdr form))
-                      ;; Since everything above failed, signal an error
-                      (raise form "No such function"))))))))
+             (aif (integer-constructor? fn code)
+                  (construct-integer it (cdr form) code)
+                  (aif (core? fn code)
+                       (funcall it (cdr form))
+                       ;; Since everything above failed, signal an error
+                       (raise form "No such function"))))))))
 
 @doc "Takes a form. Produces global IR"
 (defun compile-code (form code)
@@ -64,20 +65,6 @@ like the last register value."
     (list out
           (format nil "~{~A~&~}~&define ~A @entry(){~&~{    ~A~&~}~&    ret ~A ~A~&}"
                   (toplevel out) (res-type out) (entry out) (res-type out) (res out)))))
-
-@doc "Takes a string, tries to compile it. Output format:
-fail
-error-type: Normal Error
-error-message: ...
-Alternatively:
-success
-[output of the 'print' part of the repl]
-"
-(defun jit (form code)
-  (compile-code form code))
-
-(defun repl (code)
-  (loop (princ (jit (safe-read) code))))
 
 (defmacro with-preserved-case (&rest code)
   `(unwind-protect
@@ -88,7 +75,7 @@ success
 
 (defun eval-string (str)
   (with-preserved-case
-    (jit (safe-read-from-string str) initial-code)))
+    (compile-code (safe-read-from-string str) initial-code)))
 
 ;;; Interface to the C++ backend
 
@@ -118,6 +105,6 @@ success
 (cffi:defcfun "repeat" :string (str :string))
 
 (defun jit (c-code ir)
-  (with-foreign-string (ir ir)
-    (let ((result (jit-ir code ir)))
+  (cffi:with-foreign-string (ir ir)
+    (let ((result (jit-ir c-code ir)))
       (aif (get-error result) it result))))
