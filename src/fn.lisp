@@ -1,13 +1,6 @@
 (in-package :hylas)
 (annot:enable-annot-syntax)
 
-@doc "Tests whether `fn` is of the form 'i[bitwidth]'."
-(defun integer-constructor? (fn)
-  (and (equalp #\i (elt (symbol-name fn) 0))
-       (handler-case
-         (parse-integer (subseq (symbol-name fn) 1))
-         (error () nil))))
-
 (defun core? (fn code)
   (gethash (symbol-name fn) (core code)))
 

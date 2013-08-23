@@ -3,8 +3,6 @@
 
 (declaim (optimize (debug 3) (speed 0)))
 
-(defparameter +word+ "i64")
-
 @doc "The variable class represents generalized variables, ie both named
 variables and registers."
 (defclass <variable> ()
