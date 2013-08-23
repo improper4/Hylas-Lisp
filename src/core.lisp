@@ -3,6 +3,11 @@
 
 @document "Defines special forms and code language functions."
 
+(defmethod construct-integer (type form (code <code>))
+  (append-entry code
+    (assign (res code type)
+      (constant type (emit-code (car form) code)))))
+
 @doc "Please don't look at this code. Just don't. Please forgive me."
 (defmacro extract (form (&rest bindings) &rest code)
   (let* ((str (make-string-output-stream))
@@ -47,7 +52,7 @@
 (defmacro defcore (name &rest code)
   `(defbuiltin *core*,name ,@code))
 
-;; Variables
+;;; Variables
 
 (defop def
   (let ((sym (symbol-name (nth 0 form))))
@@ -81,7 +86,7 @@
               (store new-value-type var new-value))
             (raise form "No symbol '~A' defined." sym))))))
 
-;; Flow Control
+;;; Flow Control
 
 (defop if
   (extract form (test true-branch false-branch)
@@ -99,14 +104,14 @@
     (extract-list form
       code)))
 
-;; Mathematics
+;;; Mathematics
 
 (defmacro generic-twoarg-op (op)
   `(extract form (first second)
     (if (match first-type second-type)
       (append-entry code
         (assign (res code first-type)
-          (emit "~A ~A ~A, ~A ~A" ,op first-type first second-type second)))
+          (cmp ,op "" first-type first second)))
       (error "Types must match"))))
 
 (defop add
@@ -132,7 +137,47 @@
 (defop srem
   (generic-twoarg-op "srem"))
 
-;; Bitwise Operations
+;;; Comparison
+
+(defmacro generic-cmp-op (op valid-tests)
+  `(let ((test (car form)))
+    (unless (member (symbol-name test) ,valid-tests :test #'equal)
+      (error "Unknown test"))
+    (extract (cdr form) (first second)
+      (if (match first-type second-type)
+          (append-entry code
+            (assign (res code (int 1))
+              (cmp ,op test first-type first second)))
+          (error "Types must match")))))
+
+(defparameter +valid-icmp-tests+ (list "eq" "ne" "ugt" "uge" "ult" "ule" "sgt"
+                                   "sge" "slt" "sle"))
+
+(defparameter +valid-fcmp-tests+ (list "oeq" "ogt" "oge" "olt" "ole" "one" "ord"
+                                   "ueq" "ugt" "uge" "ult" "ule" "une" "uno"))
+(defop icmp
+  "Integer comparison."
+  (generic-cmp-op "icmp" +valid-icmp-tests+))
+
+(defop fcmp
+  "Floating-point comparison"
+  (generic-cmp-op "fcmp" +valid-fcmp-tests+))
+
+(defop cmp
+  "Compare a pair of integers or floats. -1, 0 and 1 for less-than, equal and
+  greater-than, respectively. Checks for sign/order by default.")
+
+;; Simpler comparison. Safe by default (Sign and order are checked).
+
+(defop eq)
+(defop <)
+(defop <=)
+(defop >)
+(defop >=)
+
+;; Unsafe comparisons can be performed by switching off the 'safecmp' option.
+
+;;; Bitwise Operations
 
 (defop shl
   (generic-twoarg-op "shl"))
@@ -146,8 +191,6 @@
   (generic-twoarg-op "or"))
 (defop bit-xor
   (generic-twoarg-op "xor"))
-
-(defop byte-swap)
 
 (defop count-ones
   "Count the number of set bits in an integer.
@@ -176,7 +219,16 @@
                 (bitop "cttz" source-type source)))
       (bitop-def "cttz" source-type t))))
 
-;; Conversion
+;; Bitfield size
+
+(defop size
+  "Return the size of an object in bytes.
+
+  (size 10) => 8 ;; i64
+  (size 3.14) => 8 ;; double
+  (size (i8 78)) => 1")
+
+;;; Conversion
 
 (defmacro generic-conversion (op &rest validation)
   `(let ((to (parse-type (nth 0 form))))
@@ -187,13 +239,38 @@
                   (conv ,op source source-type to))))))
 
 (defop truncate
-  "Truncate an integer.
+  "Truncate an integer or floating point number.
 
-  (truncate 10 i8) => 10")
+  (truncate 10 i8) => 10"
+  (generic-conversion (if (integer? source-type) "trunc" "fptrunc")
+    (cond
+      ((not (or (and (integer? source-type) (integer? to))
+                (and (float? source-type) (float? to))))
+         (bad-input-type form "truncate" "integer" 1 source-type))
+      ((> (width to) (width source-type))
+         (raise form "Can't truncate '~A' to '~A'. You're looking for (extend)"
+           source-type to)))))
+
 (defop sextend
-  "Extend an integer preseving the sign.")
+  "Extend an integer preseving the sign."
+  (generic-conversion "sext"
+    (cond
+      ((not (integer? source-type))
+         (bad-input-type form "sextend" "integer" 1 source-type))
+      ((< (width to) (width source-type))
+         (raise form "Can't sextend '~A' to '~A'. You're looking for (truncate)"
+           source-type to)))))
+
 (defop extend
-  "Zero-extend an integer.")
+  "Extend an integer or floating point number."
+  (generic-conversion (if (integer? source-type) "sext" "fpext")
+    (cond
+      ((not (or (and (integer? source-type) (integer? to))
+                (and (float? source-type) (float? to))))
+         (bad-input-type form "sextend" "integer" 1 source-type))
+      ((< (width to) (width source-type))
+         (raise form "Can't extend '~A' to '~A'. You're looking for (truncate)"
+           source-type to)))))
 
 (defop ptr->int
   (generic-conversion "ptrtoint"
@@ -216,21 +293,12 @@
 (defop coerce
   "Like (bitcast) but it don't give a fuck about size.")
 
-;; Bitfield size
-
-(defop size
-  "Return the size of an object in bytes.
-
-  (size 10) => 8 ;; i64
-  (size 3.14) => 8 ;; double
-  (size (i8 78)) => 1")
-
-;; Data structures
+;;; Data structures
 
 (defop type
   (destructuring-bind (name def) form
-    (append-entry (define-type name def code)
-      (assign-res (int 1) (constant (int 1) "true")))))
+    (append-entry (define-type name def form code)
+      (assign (res code (int 1)) (constant (int 1) "true")))))
 
 (defop tuple
   "Create a tuple from its arguments.
@@ -248,17 +316,38 @@
                       (if (eql i 0) "undef" last-reg)
                       type (nth i extracted-registers) i))))))))
 
-(defcore nth)
-(defcore access)
+(defcore nth
+  "Access an element on a pointer or an aggregate type.")
+
+(defcore access
+  "Access a field on a structure (Or a pointer to one, to any indirection)."
+  (let ((field (car form)))
+    (extract (cdr form) (obj)
+      (cond
+        ((not (struct? obj-type)
+           (raise form "Can't access a field of a non-structural object.")))
+        ((not (member field (names obj-type))))
+        (t
+          (append-entry code
+            (let ((pos (position field (names obj-type))))
+              (aif (indirection obj-type)
+                ;; It's a pointer, so we have to use gep
+                nil
+                ;; It's a plain old structure, so we can use extractelement
+                (assign (res code (nth pos (types obj-type)))
+                  (emit "extractvalue ~A ~A, ~A" obj-type obj pos))))))))))
 
 ;; Function definition and calling
 
 (defop function
   (define-function form code))
 
-(defop apply)
+(defop apply
+  "Apply a function pointer to a tuple of arguments.")
 
-;; Vectors
+(defop call)
+
+;;; Vectors
 
 #|(defop vector
   "Create a vector from its arguments.
@@ -271,22 +360,63 @@
 
 (defop shuffle)|#
 
-;; Memory
+;;; Memory
 
 #|(defop allocate)
 (defop store)
 (defop load)|#
 
-(defop create)
-(defop reallocate)
-(defop destroy)
+(defop create
+  "Allocate an object or an array of objects on the heap.
 
-(defop defmemman)
+  (create {i32,i32,i32}) => {i32,i32,i32}*")
+(defop reallocate
+  "Resize an array.
 
-(defop address)
-(defop fn)
+  (realloc i8* 10) => resizes the array to ten elements")
+(defop destroy
+  "Frees a pointer.
 
-;; FFI
+  (destroy i8*) => true")
+
+(defop defmemman
+  "Define a new memory manager.")
+
+(defop address
+  "Get the address of a variable or reference.")
+(defop fn
+  "Get a pointer to a named function.")
+
+;; Software Transactional Memory primitives
+
+(defop transact
+  "Takes a list of variables and ensures they are operated on properly.
+  See the chapter on STM.")
+
+;;; Printing
+
+(defcore print
+  "Generic print function. Prints integers of arbitrary size (Double-dabble)
+
+  When printing integers, the compiler allocates enough space on the stack
+  to hold the integer, then casts the pointer to something generic and sends the
+  pointer and the integer's size to the double-dabble function. The optimizer
+  will remove it from any final version of the code, so this isn't really paying
+  for what you're not using.
+
+  When printing floating point numbers, the Grisu3 algorithm is used. Pointers
+  are printed in hexadecimal form by first calling (ptr->int).
+
+  Vectors and tuples are printed by concatenating the result of printing their
+  elements.
+
+  All print functions are multi-valued: Their first return value is the actual
+  string, the second is the length of the string."
+  (extract form (val)
+    (cond
+      ((integer? val-type)))))
+
+;;; FFI
 
 (defop link
   "Link to a foreign library.
@@ -311,7 +441,7 @@
 C++ library. This information is used by Hylas to determine whether to mangle
 the name of the function and how to do so.")
 
-;; LLVM and Assembler
+;;; LLVM and Assembly
 
 (defop asm)
 (defop inline-asm)
@@ -333,7 +463,7 @@ the name of the function and how to do so.")
    :operators *operators*
    :core *core*))
 
-;; Introspection
+;;; Introspection
 
 (defop declare)
 
