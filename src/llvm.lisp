@@ -26,6 +26,19 @@
 
 ;;; More complex LLVM constructs
 
+
+;; Flow control
+
+(defun branch (test true-label false-label)
+  (emit "br i1 ~A, label ~A, label ~A" test true-label false-label))
+
+(defun goto (label)
+  (emit "br label ~A" label))
+
+(defun phi (type true-reg true-label false-reg false-label)
+  (emit "phi ~A [~A, ~A], [~A, ~A]" type true-reg true-label false-reg
+    false-label))
+
 ;; Comparison
 
 (defun cmp (op test type first second)

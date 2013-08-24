@@ -114,7 +114,7 @@
         (if (eql pos (length (stack code)))
           (raise form "Symbol '~A' already defined in the present scope." sym)
           (progn
-            (var sym (var value-type))
+            (var sym code (var code value-type))
             (append-entry code
               (assign (emit "%~A" sym) (res code value-type)))))))))
 
@@ -142,15 +142,32 @@
 ;;; Flow Control
 
 (defop if
-  (extract form (test true-branch false-branch)
-    (if (not (booleanp test-type))
-      (raise form "The type of the test expression to (if) must be i1 (boolean).")
-      (if (match true-branch-type false-branch-type)
-          ;match
-          (append-entry code
-            (emit "muh code"))
-          ;no match
-          (raise form "The types of the true and false branches must match")))))
+  (extract form (test)
+    (unless (boolean? test-type)
+      (raise form "The type of the test expression to (if) must be i1 (boolean)."))
+    (let* ((true-label (new-label code))
+           (false-label (new-label code))
+           (end-label (new-label code))
+           (true-branch-code
+             (emit-code (cadr form)
+               (append-entry code
+                 (list (branch test true-label false-label)
+                       (format-label true-label)))))
+           (true-reg (res true-branch-code))
+           (true-branch-type (res-type true-branch-code))
+           (false-branch-code
+             (emit-code (caddr form)
+                (append-entry true-branch-code
+                  (list (goto end-label)
+                        (format-label false-label))))))
+      (append-entry false-branch-code
+        (let ((false-reg (res false-branch-code)))
+          (list (goto end-label)
+                (format-label end-label)
+                  (assign (res code true-branch-type)
+                    (phi true-branch-type
+                         true-reg true-label
+                         false-reg false-label))))))))
 
 (defop not)
 
