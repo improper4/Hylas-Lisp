@@ -23,6 +23,7 @@
                :cl-annot
                :iterate
                :cffi
+               :alexandria
                :usocket
                :optima
                :cl-gendoc)

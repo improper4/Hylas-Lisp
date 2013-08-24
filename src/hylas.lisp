@@ -35,6 +35,10 @@ variables and registers."
     (or (loop for name being the hash-keys of (vars scope) using (hash-value var)
           collecting (print-var name var)) (list "[Empty Scope]"))))
 
+(defun copy-stack (stack)
+  (loop for scope in stack collecting
+    (make-instance '<scope> :vars (copy-hash-table (vars scope)))))
+
 (defclass <code> ()
   ((toplevel
     :accessor   toplevel
@@ -107,14 +111,14 @@ variables and registers."
     :res-version (res-version code)
     :string-version (string-version code)
     :label-version (label-version code)
-    :stack (stack code)
+    :stack (copy-stack (stack code))
     :packages (packages code)
     :current-package (current-package code)
     :options (options code)
-    :operators (operators code)
-    :core (core code)
-    :functions (functions code)
-    :types (types code)))
+    :operators (copy-hash-table (operators code))
+    :core (copy-hash-table (core code))
+    :functions (copy-hash-table (functions code))
+    :types (copy-hash-table (types code))))
 
 @doc "Just a simplification"
 (defmacro emit (ir &rest args)
@@ -135,17 +139,17 @@ variables and registers."
 (defun emit-var (var pos)
   (concatenate 'string (if (eql pos 0) "@" "%") var (princ-to-string pos)))
 
-(defmacro var (name &optional variable)
+(defmacro var (name code &optional variable)
   (if variable
-    `(setf (gethash ,name (vars (car (last (stack code))))) ,variable)
-    `(gethash ,name (vars (car (last (stack code)))))))
+    `(setf (gethash ,name (vars (car (last (stack ,code))))) ,variable)
+    `(gethash ,name (vars (car (last (stack ,code)))))))
 
 (defmethod res ((code <code>) &optional type)
   (if type
       (let ((num (princ-to-string (incf (res-version code)))))
-        (var num (make-var type))
-        (emit "%~A" num))
-      (emit "%~A" (princ-to-string (res-version code)))))
+        (var num code (make-var type))
+        (emit "%r~A" num))
+      (emit "%r~A" (princ-to-string (res-version code)))))
 
 @doc "Returns the type of the nth register on the current scope, if n is not given,
 it returns the type of the last register"
@@ -176,6 +180,9 @@ it returns the type of the last register"
 
 (defmethod current-label ((code <code>))
   (get-label (label-version code)))
+
+(defun format-label (label)
+  (concatenate 'string (subseq label 1) ":"))
 
 ;;; A few simple macros
 
