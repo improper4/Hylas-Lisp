@@ -169,13 +169,24 @@
                          true-reg true-label
                          false-reg false-label))))))))
 
-(defop not)
+(defop not
+  (emit-code `(|if| ,(car form) |false| |true|) code))
 
-(defop or)
+(defun make-or-form (form)
+  (if form
+      `(|if| ,(car form) |true| ,(make-or-form (cdr form)))
+      '|false|))
 
-(defop and)
+(defop or
+  (emit-code (make-or-form form) code))
 
-(defop xor)
+(defun make-and-form (form)
+  (if form
+    `(|if| ,(car form) ,(make-and-form (cdr form)) |false|)
+    '|true|))
+
+(defop and
+  (emit-code (make-and-form form) code))
 
 (defop do
   (with-new-scope code

@@ -8,7 +8,7 @@
   (gethash (symbol-name fn) (operators code)))
 
 (defmethod callfn (fn form (code <code>))
-  (error "Eudoxia hasn't got this far yet 😿"))
+  nil)
 
 @doc "A set of functions sharing the same name that are differentiated by their
 prototypes."
