@@ -238,41 +238,38 @@
 
 ;;; Comparison
 
-(defmacro generic-cmp-op (op valid-tests)
-  `(let ((test (car form)))
-    (unless (member (symbol-name test) ,valid-tests :test #'equal)
-      (error "Unknown test"))
-    (extract (cdr form) (first second)
-      (if (match first-type second-type)
-          (append-entry code
-            (assign (res code (int 1))
-              (cmp ,op test first-type first second)))
-          (error "Types must match")))))
+(defmacro generic-cmp ((strict-int-test loose-int-test)
+                       (strict-float-test loose-float-test))
+  `(extract form (first second)
+    (unless (match first-type second-type)
+      (raise form "Types must match"))
+    (cond
+      ((integer? first-type)
+        (append-entry code
+          (assign (res code (int 1))
+                  (cmp "icmp"
+                    (if (and (signed? first-type) (signed? second-type))
+                        ,strict-int-test ,loose-int-test)
+                    first-type first second))))
+      ((float? first-type)
+        (append-entry code
+          (assign (res code (int 1))
+                  (cmp "fcmp"
+                    (if (and (ordered? first-type) (ordered? second-type))
+                        ,strict-float-test ,loose-float-test)
+                    first-type first second))))
+      (t nil))))
 
-(defparameter +valid-icmp-tests+ (list "eq" "ne" "ugt" "uge" "ult" "ule" "sgt"
-                                   "sge" "slt" "sle"))
-
-(defparameter +valid-fcmp-tests+ (list "oeq" "ogt" "oge" "olt" "ole" "one" "ord"
-                                   "ueq" "ugt" "uge" "ult" "ule" "une" "uno"))
-(defop icmp
-  "Integer comparison."
-  (generic-cmp-op "icmp" +valid-icmp-tests+))
-
-(defop fcmp
-  "Floating-point comparison"
-  (generic-cmp-op "fcmp" +valid-fcmp-tests+))
-
-(defop cmp
-  "Compare a pair of integers or floats. -1, 0 and 1 for less-than, equal and
-  greater-than, respectively. Checks for sign/order by default.")
-
-;; Simpler comparison. Safe by default (Sign and order are checked).
-
-(defop =)
-(defop <)
-(defop <=)
-(defop >)
-(defop >=)
+(defop =
+  (generic-cmp ("eq" "eq") ("oeq" "ueq")))
+(defop <
+  (generic-cmp ("slt" "ult") ("olt" "ult")))
+(defop <=
+  (generic-cmp ("sle" "ule") ("ole" "ule")))
+(defop >
+  (generic-cmp ("sgt" "ugt") ("ogt" "ugt")))
+(defop >=
+  (generic-cmp ("sge" "uge") ("oge" "uge")))
 
 ;; Unsafe comparisons can be performed by switching off the 'safecmp' option.
 
