@@ -52,12 +52,14 @@ like the last register value."
         (aif (callfn fn (cdr form) code)
              it
              ;; Not that? Then it's part of the normal core
-             (aif (integer-constructor? fn code)
+             (aif (integer-constructor? fn)
                   (construct-integer it (cdr form) code)
-                  (aif (core? fn code)
-                       (funcall it (cdr form))
-                       ;; Since everything above failed, signal an error
-                       (raise form "No such function"))))))))
+                  (aif (float-constructor? fn)
+                       (construct-float it (cdr form) code)
+                       (aif (core? fn code)
+                         (funcall it (cdr form))
+                         ;; Since everything above failed, signal an error
+                         (raise form "No such function")))))))))
 
 @doc "Takes a form. Produces global IR"
 (defun compile-code (form code)

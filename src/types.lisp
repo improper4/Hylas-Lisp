@@ -2,8 +2,8 @@
 (annot:enable-annot-syntax)
 
 (defparameter +float-types+
-  (list '|half| '|uhalf| '|float| '|ufloat| '|double| '|udouble| '|fp128| '|ufp128|
-        '|x86_f80| '|ux86_f80| '|ppc_fp128| '|uppc_fp128|))
+  (list '|half| '|uhalf| '|single| '|usingle| '|double| '|udouble| '|quad|
+        '|uquad|))
 
 (defparameter +word+ "i64")
 (defparameter +word-width+ 64)
@@ -17,8 +17,8 @@
    :accessor   indirection
    :initarg    :indirection
    :initform   0
-   :documentation "Represents the level of pointer indirection: 0 is a plain old object, 1 is [type]*, 2 is [type]**, et cetera."))
-  (generic :accessor type-generic :initform nil)
+   :documentation "Represents the level of pointer indirection: 0 is a plain old object, 1 is [type]*, 2 is [type]**, et cetera.")
+  (generic :accessor type-generic :initform nil))
   (:documentation "The base class for all Hylas types."))
 
 (defmethod pointer ((type <type>))
@@ -140,7 +140,7 @@
 (defun float? (type)
   (and
     (typep type '<scalar>)
-    (memeber (scalar-type type) +float-types+)))
+    (member (scalar-type type) +float-types+)))
 
 (defun func? (type)
   (typep type '<func>))
@@ -169,7 +169,7 @@
   (if (atom form)
     (cond
       ((integer-constructor? form)
-         (int (integer-constructor? form)))
+         (integer-constructor? form))
       ((float-constructor? form)
          (scalar (float-constructor? form)))
       (t
@@ -264,7 +264,12 @@
 ;;; Emitting types into IR
 
 (defmethod print-type ((type <scalar>))
-  (scalar-type type))
+  (cond
+    ((equal (scalar-type type) "single")
+       "float")
+    ((equal (scalar-type type) "quad")
+       "fp128")
+    (t (scalar-type type))))
 
 (defmethod print-type ((type <generic-type>))
   (format nil "T~(~A~)" (type-var type)))
@@ -369,9 +374,7 @@ match."
 (defparameter +byte+  (int 8))
 (defparameter +cstr+  (pointer (int 8)))
 
-(defparameter +half+      (scalar "half"))
-(defparameter +float+     (scalar "float"))
-(defparameter +double+    (scalar "double"))
-(defparameter +fp128+     (scalar "fp128"))
-(defparameter +x86-fp80+  (scalar "x86_f80"))
-(defparameter +ppc-fp128+ (scalar "ppc_fp128"))
+(defparameter +half+      (scalar '|half|))
+(defparameter +float+     (scalar '|float|))
+(defparameter +double+    (scalar '|double|))
+(defparameter +quad+      (scalar '|quad|))

@@ -120,7 +120,7 @@ variables and registers."
 (defmacro emit (ir &rest args)
   `(format nil ,ir ,@args))
 
-; Variables and registers
+;;; Variables and registers
 
 @doc "Look up a symbol in the scope of a compiler state."
 (defun lookup (symbol code &key (lookup-register nil))
@@ -147,6 +147,15 @@ variables and registers."
         (emit "%~A" num))
       (emit "%~A" (princ-to-string (res-version code)))))
 
+@doc "Returns the type of the nth register on the current scope, if n is not given,
+it returns the type of the last register"
+(defun res-type (code &optional (n (res-version code)))
+  (aif (gethash (princ-to-string (if n n (res-version code))) (vars (car (last (stack code)))))
+       (var-type it)
+       (raise code "Could not get type of register ~A~%" n)))
+
+;;; String literals
+
 (defun get-string (num)
   (emit "@__string~A" (princ-to-string num)))
 
@@ -156,14 +165,19 @@ variables and registers."
 (defmethod current-string ((code <code>))
   (get-string (string-version code)))
 
-@doc "Returns the type of the nth register on the current scope, if n is not given,
-it returns the type of the last register"
-(defun res-type (code &optional (n (res-version code)))
-  (aif (gethash (princ-to-string (if n n (res-version code))) (vars (car (last (stack code)))))
-       (var-type it)
-       (raise code "Could not get type of register ~A~%" n)))
+;; Labels
 
-; Core functions
+(defmethod get-label (n &optional identifier)
+  (concatenate 'string "%" (aif identifier it "label") "." (princ-to-string n)))
+
+@doc "Create a new label"
+(defmethod new-label ((code <code>) &optional identifier)
+  (get-label (incf (label-version code)) identifier))
+
+(defmethod current-label ((code <code>))
+  (get-label (label-version code)))
+
+;;; A few simple macros
 
 (defmacro append-entry (code ir)
   "Append a piece of IR to the code of the entry function."

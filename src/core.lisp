@@ -4,9 +4,62 @@
 @document "Defines special forms and code language functions."
 
 (defmethod construct-integer (type form (code <code>))
-  (append-entry code
-    (assign (res code type)
-      (constant type (emit-code (car form) code)))))
+  (if (integerp (car form))
+      ;; Integer literal, so we just write it straight into the code
+      (append-entry code
+        (assign (res code type)
+          (constant type (car form))))
+      (extract form (val)
+        (append-entry code
+          (assign (res code type)
+            (cond
+              ((integer? val-type)
+                ;; All we have to do is check the bit-width and cast things
+                ;; appropriately
+                (cond
+                  ((< (width val-type) (width type))
+                    (if (signed? type)
+                        ;; Signed extension
+                        (conv "sext" val val-type type)
+                        ;; Unsigned extension
+                        (conv "zext" val val-type type)))
+                  ((> (width val-type) (width type))
+                    ;; Truncation
+                    (conv "trunc" val val-type type))
+                  (t
+                    ;; No operation needed, cause trichotomy
+                    (constant type val))))
+              ((float? val-type)
+                ;; Convert to an integer using fpto[su]i
+                (if (signed? type)
+                    (conv "fptosi" val val-type type)
+                    (conv "fptoui" val val-type type)))
+              (t
+                (raise form "Can't convert '~A' to an integer." val-type))))))))
+
+(defmethod construct-float (type form (code <code>))
+  (if (floatp (car form))
+      (append-entry code
+        (assign (res code type)
+          (constant type (car form))))
+      (extract form (val)
+        (append-entry code
+          (assign (res code type)
+            (cond
+              ((float? val-type)
+                (cond
+                  ((< (width val-type) (width type))
+                    (conv "fpext" val val-type type))
+                  ((> (width val-type) (width type))
+                    (conv "fptrunc" val val-type type))
+                  (t
+                    (constant type val))))
+              ((integer? val-type)
+                (if (signed? val-type)
+                    (conv "sitofp" val val-type type)
+                    (conv "uitofp" val val-type type)))
+              (t
+                (raise form "Can't convert '~A' to a float." val-type))))))))
 
 @doc "Please don't look at this code. Just don't. Please forgive me."
 (defmacro extract (form (&rest bindings) &rest code)
@@ -99,10 +152,28 @@
           ;no match
           (raise form "The types of the true and false branches must match")))))
 
+(defop not)
+
+(defop or)
+
+(defop and)
+
+(defop xor)
+
 (defop do
   (with-new-scope code
     (extract-list form
       code)))
+
+(defop tagbody)
+
+(defop go)
+
+(defop do)
+
+(defop dotimes)
+
+(defop doarray)
 
 ;;; Mathematics
 
@@ -169,7 +240,7 @@
 
 ;; Simpler comparison. Safe by default (Sign and order are checked).
 
-(defop eq)
+(defop =)
 (defop <)
 (defop <=)
 (defop >)
@@ -186,11 +257,11 @@
 (defop ashr
   (generic-twoarg-op "ashr"))
 (defop bit-and
-  (generic-twoarg-op "and"))
+  (generic-twoarg-op "bit-and"))
 (defop bit-or
-  (generic-twoarg-op "or"))
+  (generic-twoarg-op "bit-or"))
 (defop bit-xor
-  (generic-twoarg-op "xor"))
+  (generic-twoarg-op "bit-xor"))
 
 (defop count-ones
   "Count the number of set bits in an integer.
