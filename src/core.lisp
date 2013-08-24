@@ -213,28 +213,31 @@
           (cmp ,op "" first-type first second)))
       (error "Types must match"))))
 
-(defop add
-  (generic-twoarg-op "add"))
-(defop fadd
-  (generic-twoarg-op "fadd"))
-(defop sub
-  (generic-twoarg-op "sub"))
-(defop fsub
-  (generic-twoarg-op "fsub"))
-(defop mul
-  (generic-twoarg-op "mul"))
-(defop fmul
-  (generic-twoarg-op "fmul"))
-(defop udiv
-  (generic-twoarg-op "udiv"))
-(defop sdiv
-  (generic-twoarg-op "sdiv"))
-(defop fdiv
-  (generic-twoarg-op "fdiv"))
-(defop urem
-  (generic-twoarg-op "urem"))
-(defop srem
-  (generic-twoarg-op "srem"))
+(defmacro generic-math ((strict-int-op loose-int-op) float-op)
+  `(extract form (first second)
+    (unless (match first-type second-type)
+      (error "Types must match"))
+    (append-entry code
+      (cond
+        ((integer? first-type)
+          (assign-res first-type
+            (if (signed? first-type)
+                (op "" ,strict-int-op first-type first second)
+                (op "" ,loose-int-op first-type first second))))
+        ((float? first-type)
+          (assign-res first-type
+            (op "" ,float-op first-type first second)))))))
+
+(defop +
+  (generic-math ("add" "add") "fadd"))
+(defop -
+  (generic-math ("sub" "sub") "fsub"))
+(defop *
+  (generic-math ("mul" "mul") "fmul"))
+(defop /
+  (generic-math ("sdiv" "udiv") "fdiv"))
+(defop %
+  (generic-math ("srem" "urem") "frem"))
 
 ;;; Comparison
 
@@ -519,18 +522,11 @@
 
   (link \"GL\") => Links to the OpenGL library.
 
-  (link
-    (case os
-      :windows \"SDL_mixer.dll\"
-      :linux \"libSDL_mixer.so\")) => Links to the SDL Mixer library in a
-                                      platform-independent way"
-  (extract form (lib)
-    (append-entry
-      (append-toplevel code
-        (emit "declare i8 @link(i8*)"))
-      (assign (res code (int 8))
-        (call "link" :ret (int 8)
-                     :args (list (list lib lib-type)))))))
+  (link #+windows \"SDL_mixer.dll\" #+unix \"libSDL_mixer.so\") => Links to the
+    SDL Mixer library in a platform-independent way"
+  (append-entry code
+    (assign-res (int 8)
+      (constant (int 8) (link (car form))))))
 
 (defop foreign
   "Define a foreign function. The first argument is whether it's from a C or

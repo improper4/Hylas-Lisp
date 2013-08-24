@@ -44,6 +44,8 @@
 (defun cmp (op test type first second)
   (emit "~A ~A ~A ~A, ~A" op test type first second))
 
+(defmacro op (&rest args) `(cmp ,@args))
+
 @doc "An ad-hoc, castrated GetElementPtr"
 (defun gep (type ptr &rest indices)
   (emit "getelementptr ~A* ~A ~{~A~#[~:;, ~]~}" type ptr
