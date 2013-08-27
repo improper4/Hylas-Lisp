@@ -93,6 +93,17 @@
      (push (make-instance '<scope>) (stack code))
      ,@code))
 
+(defmacro with-function-scope (code-state &rest code)
+  `(with-new-scope ,code-state
+    (setf (context (car (last (stack code)))) :fn)
+    ,@code))
+
+(defmacro with-lambda-scope (code-state &rest code)
+  `(with-new-scope ,code-state
+    (setf (context (car (last (stack code)))) :lambda)
+    (push (list nil) (lambda-contexts code))
+    ,@code))
+
 (defparameter *operators* (make-hash-table :test #'equal))
 (defparameter *core* (make-hash-table :test #'equal))
 
@@ -337,40 +348,6 @@
           (assign (res code to)
                   (conv ,op source source-type to))))))
 
-(defop truncate
-  "Truncate an integer or floating point number.
-
-  (truncate 10 i8) => 10"
-  (generic-conversion (if (integer? source-type) "trunc" "fptrunc")
-    (cond
-      ((not (or (and (integer? source-type) (integer? to))
-                (and (float? source-type) (float? to))))
-         (bad-input-type form "truncate" "integer" 1 source-type))
-      ((> (width to) (width source-type))
-         (raise form "Can't truncate '~A' to '~A'. You're looking for (extend)"
-           source-type to)))))
-
-(defop sextend
-  "Extend an integer preseving the sign."
-  (generic-conversion "sext"
-    (cond
-      ((not (integer? source-type))
-         (bad-input-type form "sextend" "integer" 1 source-type))
-      ((< (width to) (width source-type))
-         (raise form "Can't sextend '~A' to '~A'. You're looking for (truncate)"
-           source-type to)))))
-
-(defop extend
-  "Extend an integer or floating point number."
-  (generic-conversion (if (integer? source-type) "sext" "fpext")
-    (cond
-      ((not (or (and (integer? source-type) (integer? to))
-                (and (float? source-type) (float? to))))
-         (bad-input-type form "sextend" "integer" 1 source-type))
-      ((< (width to) (width source-type))
-         (raise form "Can't extend '~A' to '~A'. You're looking for (truncate)"
-           source-type to)))))
-
 (defop ptr->int
   (generic-conversion "ptrtoint"
     (cond
@@ -494,7 +471,7 @@
 
 ;;; Printing
 
-(defcore print
+(defcore show
   "Generic print function. Prints integers of arbitrary size (Double-dabble)
 
   When printing integers, the compiler allocates enough space on the stack
@@ -509,7 +486,7 @@
   Vectors and tuples are printed by concatenating the result of printing their
   elements.
 
-  All print functions are multi-valued: Their first return value is the actual
+  All show functions are multi-valued: Their first return value is the actual
   string, the second is the length of the string."
   (extract form (val)
     (cond
@@ -538,13 +515,13 @@ the name of the function and how to do so.")
 (defop asm)
 (defop inline-asm)
 
-(defop LLVM
+(defop llvm
   "Append a string of LLVM IR to the global scope."
   (let ((asm (nth 0 form)))
     (append-toplevel code
       asm)))
 
-(defop inline-LLVM
+(defop inline-llvm
   "Append a string of LLVM IR in the current context."
   (let ((asm (nth 0 form)))
     (append-entry code
