@@ -1,7 +1,12 @@
 (in-package :hylas)
 
+(define-condition hylas-error (error)
+  ((msg :initarg :msg :reader msg)))
+
 (defmacro raise (code msg &rest args)
-  `(error (format nil ,(concatenate 'string msg "~%Code state:~%~a") ,@args ,code)))
+  `(error 'hylas-error
+    :msg (format nil ,(concatenate 'string msg "~%Code state:~%~a")
+           ,@args ,code)))
 
 (defun bad-input-type (code name expected-type pos given-type)
   (error code "(~A) expected ~A as its ~A argument, but got ~A"
