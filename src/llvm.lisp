@@ -76,13 +76,13 @@
 
 ;; Functions
 
-(defun fn-proto (args)
-  (loop for arg in args collecting
-    (format nil "~A ~A" (nth 1 arg) (nth 0 arg))))
+(defun fn-proto (arg-names arg-types)
+  (loop for name in arg-names for type in arg-types collecting
+    (format nil "~A %~A" type name)))
 
-(defun define (fn &key ret args tail attrs gc body last)
-  (emit "define ~A @~A(~A) ~{~A ~} ~A {~&~{    ~A~&~}    ret ~A ~A~&}" ret fn
-    (or (fn-proto args) "") (unless attrs (list ""))
+(defun define (fn &key ret arg-names arg-types tail attrs gc body last)
+  (emit "define ~A @~A(~{~A~#[~:;, ~]~}) ~{~A ~} ~A {~&~{    ~A~&~}    ret ~A ~A~&}" ret fn
+    (or (fn-proto arg-names arg-types)  "") (unless attrs (list ""))
     (if gc (concatenate 'string "gc \"" gc "\"") "") body ret last))
 
 (defun call (fn &key ret args (cconv "") tail)

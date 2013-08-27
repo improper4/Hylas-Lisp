@@ -39,14 +39,22 @@ prototypes."
   (let ((n (aif (gethash name (functions code))
                 (length (functions it))
                 0)))
-    (concatenate 'string (mangle name args) (princ-to-string n))))
+    (concatenate 'string (mangle name args) ".." (princ-to-string n))))
 
-(defun parse-function (form)
-  (let ((name (car form))
-        (ret  (cadr form))
-        (args (caddr form))
-        (body (cdddr form)))
-    (list name ret args body)))
+(defun parse-function (form code)
+  (destructuring-bind (&optional name args ret &rest body) form
+    (let ((arg-names (loop for arg in args collecting (car arg)))
+          (arg-types (loop for arg in args collecting
+                       (parse-type (cadr arg) code)))
+          (doc (if (and (>= (length body) 2) (stringp (car body)))
+                   (prog1 (car body) (setf body (cdr body))) "")))
+      (cond
+        ((null name)
+         (raise form "Functions can't be nameless. You want (lambda)."))
+        ((or (member nil arg-names) (member nil arg-types))
+         (raise form "The null form can't be used in an argument list."))
+        (t
+          (list name arg-names arg-types ret doc (if body body :declare)))))))
 
 (defmethod add-fn-def (name fn (code <code>))
   (aif (gethash name (functions code))
@@ -54,23 +62,28 @@ prototypes."
     (setf it (list fn))))
 
 (defmethod define-function (form (code <code>))
-  (destructuring-bind (name ret args body) (parse-function form)
-    (if (fn-exists? name ret args code)
+  (destructuring-bind (name arg-names arg-types ret doc body)
+                      (parse-function form code)
+    (if (fn-exists? name ret arg-types code)
         (error form "a function with this name and prototype already exists.")
         (destructuring-bind (opts docs form) (get-meta form)
           (let ((fn (make-instance '<function> :name name
-                                    :base-name (mangle-fn name args code)
+                                    :base-name (mangle-fn name arg-types code)
                                     :ret-type ret
-                                    :arg-types args
+                                    :arg-types arg-types
                                     :docstring docs
                                     :tco (option? "tail" opts)
                                     :cconv (get-cconv opts))))
             (add-fn-def name fn code)
             (format t "~A" body)
-            (let ((fn-code (extract-list body code)))
-              (append-toplevel fn-code
-                (define (base-name fn) :ret ret :args args
-                  :tail (tco fn) :body (entry fn-code) :last (res code)))))))))
+            (let ((code (extract-list body code)))
+              (with-function-scope code
+                (loop for arg in arg-names for type in arg-types do
+                  (var arg code (make-var type)))
+                (append-toplevel code
+                  (define (base-name fn) :ret ret :arg-names arg-names
+                    :arg-types arg-types :tail (tco fn)
+                    :body (entry code) :last (res code))))))))))
 
 (defmethod define-generic-function (fn (code <code>)))
 
