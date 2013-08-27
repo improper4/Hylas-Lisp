@@ -4,22 +4,22 @@ Hylas is a statically-typed, [wide-spectrum](http://en.wikipedia.org/wiki/Wide-s
 
 # Examples
 
-## Recursive, Tail Call-Optimized Fibonacci Function:
+## Recursive Fibonacci Function:
 
 ```lisp
-(recursive fib i64 ((n i64))
-  (if (icmp n slt 2)
+(function fib ((n i64)) i64
+  (if (< n 2)
     n
-    (add (fib (sub n 1))
-         (fib (sub n 2)))))
+    (+ (fib (- n 1))
+       (fib (- n 2)))))
 ```
 
 ## Calling a foreign function:
 
 ```lisp
-(foreign C printf i32 (pointer i8) ...)
+(foreign C printf (pointer i8) ... i32)
 
-(printf "Hello, world! This is a double, in scientific notation: %e", 3.141592)
+(printf "Hello, world! This is a double, in scientific notation: %e" 3.141592)
 ```
 
 ## Using a foreign library:
@@ -27,15 +27,16 @@ Hylas is a statically-typed, [wide-spectrum](http://en.wikipedia.org/wiki/Wide-s
 ```lisp
 (link "libSDL.so")
 
-(foreign C SDL_Init void i64)
-(foreign C SDL_Delay void i64)
+(foreign C SDL_Init i64 void)
+(foreign C SDL_Delay i64 void)
 (foreign C SDL_Quit void)
 
-(structure SDL_Color
-  (r            byte)
-  (g            byte)
-  (b            byte)
-  (unused       byte))
+(type SDL_Color
+  (structure
+    (r            byte)
+    (g            byte)
+    (b            byte)
+    (unused       byte)))
 ```
 
 # Benchmarks
@@ -49,12 +50,12 @@ Hylas is a statically-typed, [wide-spectrum](http://en.wikipedia.org/wiki/Wide-s
 Documentation on the _language_ is available as a series of [Markdown](http://daringfireball.net/projects/markdown/) files in the `docs` folder, and can be built using Make and [Pandoc](http://johnmacfarlane.net/pandoc/):
 
 ```bash
-$ make doc
+$ make book
 ```
 
-This will generate the HTML files in the `docs/html` folder. Use `make clean` to delete them.
+This will generate the HTML files in the `docs/book/html` folder. Use `make clean` to delete them.
 
-Documentation on the _compiler_ is available as Doxygen comments, the Doxyfile being in the same `docs` folder. A Make recipe (`doxygen`) can be used to build the output into the `docs/Doxygen` folder.
+Documentation on the _compiler_ can be generated running `make doc`.
 
 # License
 
