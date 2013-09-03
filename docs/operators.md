@@ -1,6 +1,4 @@
-# Reference
-
-## Special Forms
+# Special Forms
 
 Special forms, also known as operators, are non-overloadable operators which
 usually have special execution rules. The simplest example is `if`, which only
@@ -8,7 +6,7 @@ executes one of either the true and false branches, depending on the result of a
 condition, and `def`, which does not try to evaluate the symbol it's going to
 define.
 
-### `def` and `let`
+## `def` and `let`
 
 ```lisp
 (def|let {var_1 value_1 [docstring]}+)
@@ -24,11 +22,11 @@ Examples:
   z {65 65 65} "A triple of integers")
 ```
 
-### `set`
+## `set`
 
-### Flow Control
+## Flow Control
 
-#### `if`
+### `if`
 
 ```lisp
 (if test true-branch false-branch)
@@ -36,7 +34,7 @@ Examples:
 
 Both branches must be of the same type.
 
-#### `tagbody` and `go`
+### `tagbody` and `go`
 
 `tagbody` is similar to its Common Lisp counterpart, only far more limited to reduce Dijkstra's disappointment at me. It's main purpose is to allow low-level performance hacks and allow higher-level iteration constructs to be implemented in Hylas itself.
 
@@ -71,19 +69,19 @@ Example:
     false))
 ```
 
-### Functions
+## Functions
 
-#### `function`
+### `function`
 
-#### `lambda`
+### `lambda`
 
-#### `foreign`
+### `foreign`
 
-#### `fn`
+### `fn`
 
-### Types
+## Types
 
-#### `type`
+### `type`
 
 ```lisp
 (type type-name type-definition [docstring])
@@ -91,39 +89,68 @@ Example:
 
 Defines a new type `type-name`.
 
-#### `size`
+### `size`
 
-#### `ptr->int` and `int->ptr`
+### `ptr->int` and `int->ptr`
 
-#### Integer Constructors
+## Integer Constructors
 
-#### Tuple Constructors
+## Tuple Constructors
 
-#### Array Constructors
+## Array Constructors
+
+## Memory
+
+### `new`
+
+### `resize`
+
+### `free`
+
+### `address`
+
+Return the address of its argument.
+
+```lisp
+(def x 10)
+(address x) => <pointer>
+
+(address (nth 3 (create i32 10))) => <pointer to the third element>
+```
+
+### `memman`
+
+Define a new memory manager by passing function pointers to each memory manager function.
+
+```lisp
+(memman C
+  new (fn malloc word (pointer i8))
+  resize (fn realloc (pointer i8) word (pointer i8))
+  free (fn free (pointer i8) unit))
+```
+
+The functions are:
+
+* `(new type [count])`: Allocates an object of type `type`, and returns it. If `count` is provided, the result is an array of length `count`. The address may be obtained with `(address)`.
+* `(resize array new)`: Resize an array.
+
+Pointer conversion and other calculations are performed by Hylas, so your functions don't actually need to know what an array is. The prototypes for these functions are:
+
+* `new`: `(word) -> (pointer i8)`
+* `resize`: `((pointer i8)`
 
 
-### Memory
 
-#### `create`
-
-#### `reallocate`
-
-#### `destroy`
-
-#### `defmemman`
-
-#### `address`
-
-### Inlining
+## Inlining
 
 These operations allow the programmer to directly inject LLVM IR or platform-dependent
 assembly into the code. `llvm` and `inline-llvm` insert LLVM Ir globally and locally, respectively; `asm` and `inline-asm` insert assembly code, again, globally and locally.
 
-## Language Core
+# Language Core
 
 The language core consists of operators that are called after a user-defined function with the name and prototype could not be found. They have no special execution rules and can be overloaded.
 
-### Mathematical Operations
+## Mathematical Operations
 
 All mathematical operations have an arity of two unless otherwise specified, and
 don't support mixing integer and floating-point operands. These functions check
@@ -135,7 +162,7 @@ and modulo, respectively.
 
 `=`, `<`, `<=`, `>`, `>=` should be self-explanatory.
 
-### Bitwise Operations
+## Bitwise Operations
 
 Both arguments must be integers or vectors of integers.
 
@@ -152,9 +179,9 @@ whether this is logical or arithmetic right-shift, respectively.
 `count-leading-ones`: Count the number of most significant zeros.
 `count-trailing-ones`: Count the number of least significant zeros.
 
-### Linking
+## Linking
 
-#### `link`
+### `link`
 
 ```lisp
 (link library)
@@ -168,13 +195,3 @@ Example:
 (link #+windows "libSDL.dll" #+unix "libSDL.so" #+darwin "libSDL.dylib")
 ```
 
-
-## Prelude
-
-The prelude consists of Hylas code that is compiled prior ot everything else.
-
-### `show`
-
-## Type Expressions
-
-## Compiler Options
