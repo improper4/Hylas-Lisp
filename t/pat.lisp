@@ -1,7 +1,7 @@
 (in-package :hylas-test)
 (annot:enable-annot-syntax)
 
-(defparameter +args+
+#|(defparameter +args+
   (list (int 64) (generic :a)
         (make-instance '<func> :ret (int 1) :args (list (generic :b)
                                                            (generic :b)))
@@ -17,10 +17,20 @@
 @doc "These arg lists should match `+args+`"
 (defparameter +valid-arg-lists+
   (list
-    (list (int 64) +double+)))
+    (list (int 64) +double+)))|#
 
-(plan nil)
+; (def-suite basic
+;   :description "firing up a parser, setting input to something, etc.")
+; (in-suite basic)
 
+; (test initialization
+;   (is (with-parser t)))
 
+; (test string-input
+;   (is (with-string-input ("derp") t)))
 
-(finalize)
+(defparameter args
+  (mapcar #'(lambda (type) (parse-type type initial-code))
+    '(|i64| (|?| |Ta| |i32| |single|))))
+
+(run!)

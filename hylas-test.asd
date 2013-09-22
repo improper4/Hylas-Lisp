@@ -2,9 +2,12 @@
   :author "Fernando Borretti"
   :license "MIT"
   :depends-on (:hylas
-               :cl-test-more)
+               :fiveam)
   :components ((:module "t"
+                :serial t
                 :components
                 ((:file "hylas")
-                 (:file "pat"))))
+                 (:file "pat")
+                 (:file "fn")
+                 (:file "lambda"))))
   :perform (load-op :after (op c) (asdf:clear-system c)))

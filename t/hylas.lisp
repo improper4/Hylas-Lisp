@@ -1,17 +1,31 @@
-#|
-  This file is a part of hylas project.
-  Copyright (c) 2013 Fernando Borretti (eudoxiahp@gmail.com)
-|#
-
-(in-package :cl-user)
 (defpackage hylas-test
-  (:use :cl
-        :hylas
-        :cl-test-more))
+  (:use :cl :hylas :fiveam))
 (in-package :hylas-test)
 
-(plan nil)
+(def-suite context
+  :description "Context-related stuff.")
+(in-suite context)
 
-;; blah blah blah.
+(test scope-context
+  (is
+    (eq
+      (let ((code initial-code))
+        (with-new-scope code
+          (last-context code)))
+      :normal))
+  (is
+    (eq
+      (let ((code initial-code))
+        (with-new-scope code
+          (with-function-scope code
+            (last-context code))))
+      :fn))
+  (is
+    (eq
+      (let ((code initial-code))
+        (with-new-scope code
+          (with-lambda-scope code
+            (last-context code))))
+      :lambda)))
 
-(finalize)
+(run!)
