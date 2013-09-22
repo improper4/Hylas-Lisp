@@ -25,7 +25,8 @@ variables and registers."
   ((vars
      :accessor    vars
      :initarg     :vars
-     :initform    (make-hash-table :test #'equal))))
+     :initform    (make-hash-table :test #'equal))
+   (context :accessor context :initarg :context :initform :normal)))
 
 (defun print-var (name var)
   (format nil "~S -> ~A" name var))
@@ -63,6 +64,14 @@ variables and registers."
     :accessor   label-version
     :initarg    :label-version
     :initform   0)
+  (lambda-version
+    :accessor   lambda-version
+    :initarg    :lambda-version
+    :initform   0)
+  (lambda-contexts
+    :accessor   lambda-contexts
+    :initarg    :lambda-contexts
+    :initform   (list nil))
   (stack
     :accessor   stack
     :initarg    :stack
@@ -111,6 +120,8 @@ variables and registers."
     :res-version (res-version code)
     :string-version (string-version code)
     :label-version (label-version code)
+    :lambda-version (lambda-version code)
+    :lambda-contexts (lambda-contexts code)
     :stack (copy-stack (stack code))
     :packages (packages code)
     :current-package (current-package code)
@@ -119,6 +130,14 @@ variables and registers."
     :core (copy-hash-table (core code))
     :functions (copy-hash-table (functions code))
     :types (copy-hash-table (types code))))
+
+@export
+(defmethod last-context ((code <code>))
+  (loop for i from (1- (length (stack code))) downto 0 do
+    (let ((ctx (context (nth i (stack code)))))
+      (unless (eql ctx :normal)
+        (return-from last-context (values ctx i)))))
+  (values :normal 0))
 
 @doc "Just a simplification"
 (defmacro emit (ir &rest args)
@@ -136,8 +155,9 @@ variables and registers."
     (values (gethash symbol (vars scope))
       (position scope (stack code)))))
 
-(defun emit-var (var pos)
-  (concatenate 'string (if (eql pos 0) "@" "%") var (princ-to-string pos)))
+(defun emit-var (name var pos)
+  (concatenate 'string (if (eql pos 0) "@" "%") (symbol-name name)
+    (princ-to-string pos)))
 
 (defmacro var (name code &optional variable)
   (if variable
