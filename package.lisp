@@ -5,4 +5,5 @@
                 :for
                 :collect)
   (:import-from :alexandria
-                :copy-hash-table))
+                :copy-hash-table)
+  (:export  :code))

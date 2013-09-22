@@ -88,16 +88,19 @@
      (setf extracted-types (reverse extracted-types))
      ,@code))
 
+@export
 (defmacro with-new-scope (code-state &rest code)
   `(let ((code (copy-code ,code-state)))
      (push (make-instance '<scope>) (stack code))
      ,@code))
 
+@export
 (defmacro with-function-scope (code-state &rest code)
   `(with-new-scope ,code-state
     (setf (context (car (last (stack code)))) :fn)
     ,@code))
 
+@export
 (defmacro with-lambda-scope (code-state &rest code)
   `(with-new-scope ,code-state
     (setf (context (car (last (stack code)))) :lambda)
@@ -207,8 +210,6 @@
 (defop tagbody)
 
 (defop go)
-
-(defop do)
 
 (defop dotimes)
 
@@ -527,6 +528,7 @@ the name of the function and how to do so.")
     (append-entry code
       asm)))
 
+@export
 (defparameter initial-code
   (make-instance '<code>
    :operators *operators*
