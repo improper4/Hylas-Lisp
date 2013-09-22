@@ -61,6 +61,18 @@ prototypes."
     (setf it (append it fn))
     (setf it (list fn))))
 
+@doc "Maybe this compilation model wasn't such a good idea after all."
+(defun create-function (body fn ret arg-names arg-types code)
+  (with-function-scope code
+    (loop for arg in arg-names for type in arg-types do
+      (var arg code (make-var type)))
+    (let ((code (extract-list body code)))
+      (toplevel
+        (append-toplevel code
+          (define (base-name fn) :ret ret :arg-names arg-names
+            :arg-types arg-types :tail (tco fn)
+            :body (entry code) :last (res code)))))))
+
 (defmethod define-function (form (code <code>))
   (destructuring-bind (name arg-names arg-types ret doc body)
                       (parse-function form code)
@@ -75,15 +87,10 @@ prototypes."
                                     :tco (option? "tail" opts)
                                     :cconv (get-cconv opts))))
             (add-fn-def name fn code)
-            (format t "~A" body)
-            (let ((code (extract-list body code)))
-              (with-function-scope code
-                (loop for arg in arg-names for type in arg-types do
-                  (var arg code (make-var type)))
-                (append-toplevel code
-                  (define (base-name fn) :ret ret :arg-names arg-names
-                    :arg-types arg-types :tail (tco fn)
-                    :body (entry code) :last (res code))))))))))
+            (append-entry
+              (append-toplevel code
+                (create-function body fn ret arg-names arg-types code))
+              (assign-res (int 1) (constant (int 1) "true"))))))))
 
 (defmethod define-generic-function (fn (code <code>)))
 
