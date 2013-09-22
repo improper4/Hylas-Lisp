@@ -8,6 +8,29 @@
 (defparameter +word+ "i64")
 (defparameter +word-width+ 64)
 
+(defmacro def-type (name (&rest parents) (&rest slots) &key doc print print-flat
+		   match vectorizable?)
+  `(progn
+     (defclass ,name (,@parents)
+       (,@slots)
+       (:documentation ,doc))
+     
+     (defun ,(intern (format nil "~A?"
+		       (remove-if #'(lambda (c) (or (char-equal c #\<)
+						    (char-equal c #\>)))
+		         (symbol-name name))))
+       (obj)
+       (typep obj ',name))
+
+     (defmethod print-type ((type ,name))
+       ,@print)
+
+     (defmethod print-flat ((type ,name))
+       ,@print-flat)
+
+     (defmethod match ((a ,name) (b ,name))
+       ,@match)))
+
 (defclass <type> ()
   ((docs
    :accessor   docs
@@ -26,9 +49,16 @@
   (incf (indirection type))
   type)
 
-(defclass <unit> (<type>)
+(defmethod pointer? ((type <type>))
+  (> (indirection type) 1))
+
+(def-type <unit> (<type>)
   ()
-  (:documentation "The unit type ()."))
+  :doc "The unit type ()"
+  :print ((format t "i1"))
+  :print-flat ("unit")
+  :match (t)
+  :vectorizable? t)
 
 (defclass <generic-type> (<type>)
   ((type-var :accessor type-var :initarg :type-var)
@@ -38,28 +68,50 @@
 (defun generic (sym &optional opts)
   (make-instance '<generic-type> :type-var sym :options opts))
 
-(defclass <scalar> (<type>)
+(defmethod print-type ((type <generic-type>))
+  (format nil "T~(~A~)" (type-var type)))
+
+(def-type <scalar> (<type>)
   ((type
      :accessor   scalar-type
      :initarg    :type
      :initform   "")
-   (ordered? :accessor ordered? :initarg :ordered :initform t)))
+   (ordered? :accessor ordered? :initarg :ordered :initform t))
+  :doc "Scalar type (integers and floats)."
+  :print ((cond
+	    ((equal (scalar-type type) "single")
+	     "float")
+	    ((equal (scalar-type type) "quad")
+	     "fp128")
+	    (t (scalar-type type))))
+  :print-flat ((print-type type))
+  :match ((equal (scalar-type a) (scalar-type b)))
+  :vectorizable? t)
 
 (defun scalar (type &optional (ordered t))
   (make-instance '<scalar> :type type :ordered ordered))
+
+(defun float? (type)
+  (and
+    (typep type '<scalar>)
+    (member (scalar-type type) +float-types+)))
 
 (defun float-constructor? (fn)
   (aif (member fn +float-types+)
        (scalar (symbol-name fn) (char-equal #\u (aref (symbol-name fn) 0)))))
 
-(defclass <integer> (<type>)
+(def-type <integer> (<type>)
   ((width
      :accessor width
      :initarg :width)
    (signed?
      :accessor signed?
      :initarg :signed?
-     :initform t)))
+     :initform t))
+  :print ((format nil "~A~A" (if (signed? type) "i" "ui") (width type)))
+  :print-flat ((print-type type))
+  :match ((eql (width a) (width b)))
+  :vectorizable? t)
 
 @doc "How many bits does it take to represent `int`?"
 (defun min-width (int)
@@ -67,6 +119,11 @@
 
 (defun int (bit-width &optional (signed t))
   (make-instance '<integer> :width bit-width :signed? signed))
+
+(defun boolean? (type)
+  (and
+    (typep type '<integer>)
+    (eql (width type) 1)))
 
 @doc "Tests whether `fn` is of the form 'i[bitwidth]' or 'ui[bitwidth]'."
 (defun integer-constructor? (fn)
@@ -81,7 +138,7 @@
              (int (parse-integer (subseq (symbol-name fn) 2)) nil))
            (error () nil)))))
 
-(defclass <func> (<scalar>)
+(def-type <func> (<scalar>)
   ((ret
      :accessor   ret
      :initarg    :ret)
@@ -89,13 +146,30 @@
     :accessor   args
     :initarg    :args
     :initform   ()))
-  (:documentation "The function pointer type"))
+  :doc "The function pointer type"
+  :print
+    ((format nil "~A(~{~A~#[~:;, ~]~})*" (ret type)
+       (mapcar #'emit-type (args type))))
+  :print-flat
+    ((format nil "_bfn_~A_~{~A~#[~:;.~]~}_efn_" (ret type)
+       (mapcar #'print-flat (args type)))))
 
-(defclass <aggregate> (<type>)
+(def-type <aggregate> (<type>)
   ((types :accessor   types
     :initarg    :types
     :initform   '()))
-  (:documentation "This describes tuples and structures."))
+  :doc "This describes tuples and structures."
+  :print ((format nil "{~{~A~#[~:;, ~]~}}" (mapcar #'emit-type (types type))))
+  :print-flat
+    ("The `_ba_` and `_ea` markers here stand for 'begin aggregate' and 'end
+aggregate'."
+     (format nil "_ba_~{~A.~}_ea_" (types type)))
+  :match
+    ((when (eql (length (types a)) (length (types b)))
+       (not
+	 (member nil
+	   (loop for i from 0 to (length (types a)) collecting
+             (match (nth i (types a)) (nth i (types b)))))))))
 
 ;;      body
 ;;        |
@@ -109,67 +183,66 @@
 (defun aggregate (types)
   (make-instance '<aggregate> :types types))
 
-(defclass <struct> (<aggregate>)
+(def-type <struct> (<aggregate>)
   ((names :accessor   names
     :initarg    :names
     :initform   '())))
 
-(defclass <abstract> (<struct>)
+(def-type <abstract> (<struct>)
   ((generic-names :accessor generic-names :initarg :generic-names)))
 
-(defclass <vector> (<type>)
+(def-type <vector> (<type>)
   ((type
      :accessor vector-type
      :initarg :type)
   (size
      :accessor size
-     :initarg :size)))
+     :initarg :size))
+  :doc "SIMD vectors"
+  :print ((format nil "<~A x ~A>" (size type) (type type)))
+  :print-flat
+    ("This is similar to the way LLVM intrinsics are specialized to take vector
+types."
+    (format nil "v~Ax~A" (size type) (vector-type type)))
+  :match
+    ((and (eql (size a) (size b))
+	  (match (vector-type a) (vector-type b))))
+  :vectorizable? t)
 
 (defmethod vector->intrinsic ((vec <vector>))
   (emit "v~A~A" (size vec) (vector-type vec)))
-
-;; Some functions on types
-
-(defmethod unit? ((type <type>))
-  (typep type '<unit>))
-
-(defmethod pointer? ((type <type>))
-  (> (indirection type) 1))
-
-(defun integer? (type)
-  (typep type '<integer>))
-
-(defun boolean? (type)
-  (and
-    (typep type '<integer>)
-    (eql (width type) 1)))
-
-(defun float? (type)
-  (and
-    (typep type '<scalar>)
-    (member (scalar-type type) +float-types+)))
-
-(defun func? (type)
-  (typep type '<func>))
-
-(defun tuple? (type)
-  (and
-    (typep type '<aggregate>)
-    (not (typep type '<struct>))))
-
-(defun struct? (type)
-  (typep type '<struct>))
-
-(defun abstract? (type)
-  (typep type '<abstract>))
-
-(defun vector? (type)
-  (typep type '<vector>))
 
 (defun vector-or? (alt type)
   (or (typep type alt)
       (and (typep type '<vector>)
            (typep (vector-type type) alt))))
+
+;;; Emitting types into IR
+
+(defmethod emit-type ((type <type>))
+  (format nil "~A~{~A~}" (print-type type) (loop repeat (indirection type)
+    collecting "*")))
+
+(defmethod print-object ((type <type>) stream)
+  (format stream "~A" (emit-type type)))
+
+;;; "Flat printing" of types in a way amenable to function mangling
+
+(defmethod print-flat ((type <type>))
+  (format nil "~A~{~A~}" (flat-type type) (loop repeat (indirection type)
+    collecting ".ptr")))
+
+(defun mangle (fn args)
+  (format nil "~A.~{~A~#[~:;. ~]~}" fn (mapcar #'print-flat args)))
+
+;;; Type matching
+
+@doc "If all other `match` methods are not appropriate, then the types are not a
+match."
+(defmethod match ((a <type>) (b <type>))
+  nil)
+
+;;; Parsing forms into type objects
 
 @export
 @doc "Generate a type object from the form of a type signature."
@@ -279,100 +352,6 @@
               ;; specialize
               nil))))))
 
-;;; Emitting types into IR
-
-(defmethod print-type ((type <unit>))
-  (format nil "i1"))
-
-(defmethod print-type ((type <scalar>))
-  (cond
-    ((equal (scalar-type type) "single")
-       "float")
-    ((equal (scalar-type type) "quad")
-       "fp128")
-    (t (scalar-type type))))
-
-(defmethod print-type ((type <generic-type>))
-  (format nil "T~(~A~)" (type-var type)))
-
-(defmethod print-type ((type <integer>))
-  (format nil "~A~A" (if (signed? type) "i" "ui") (width type)))
-
-(defmethod print-type ((type <aggregate>))
-  (format nil "{~{~A~#[~:;, ~]~}}" (mapcar #'emit-type (types type))))
-
-(defmethod print-type ((type <func>))
-  (format nil "~A(~{~A~#[~:;, ~]~})*" (ret type)
-    (mapcar #'emit-type (args type))))
-
-(defmethod print-type ((type <vector>))
-  (format nil "<~A x ~A>" (size type) (type type)))
-
-(defmethod emit-type ((type <type>))
-  (format nil "~A~{~A~}" (print-type type) (loop repeat (indirection type)
-    collecting "*")))
-
-(defmethod print-object ((type <type>) stream)
-  (format stream "~A" (emit-type type)))
-
-;;; "Flat printing" of types in a way amenable to function mangling
-
-(defmethod flat-type ((type <unit>))
-  "unit")
-
-(defmethod flat-type ((type <scalar>))
-  (print-type type))
-
-(defmethod flat-type ((type <integer>))
-  (print-type type))
-
-@doc "The `_ba_` and `_ea` markers here stand for 'begin aggregate' and 'end
-aggregate'."
-(defmethod flat-type ((type <aggregate>))
-  (format nil "_ba_~{~A.~}_ea_" (types type)))
-
-@doc "This is similar to the way LLVM intrinsics are specialized to take vector
-types."
-(defmethod flat-type ((type <vector>))
-  (format nil "v~Ax~A" (size type) (vector-type type)))
-
-(defmethod flat-type ((type <func>))
-  (format nil "_bfn_~A_~{~A~#[~:;.~]~}_efn_" (ret type)
-    (mapcar #'print-flat (args type))))
-
-(defmethod print-flat ((type <type>))
-  (format nil "~A~{~A~}" (flat-type type) (loop repeat (indirection type)
-    collecting ".ptr")))
-
-(defun mangle (fn args)
-  (format nil "~A.~{~A~#[~:;. ~]~}" fn (mapcar #'print-flat args)))
-
-;;; Type matching
-
-(defmethod match ((a <unit>) (b <unit>))
-  t)
-
-(defmethod match ((a <scalar>) (b <scalar>))
-  (equal (scalar-type a) (scalar-type b)))
-
-(defmethod match ((a <integer>) (b <integer>))
-  (eql (width a) (width b)))
-
-(defmethod match ((a <aggregate>) (b <aggregate>))
-  (when (eql (length (types a)) (length (types b)))
-    (not
-      (member nil
-        (loop for i from 0 to (length (types a)) collecting
-          (match (nth i (types a)) (nth i (types b))))))))
-
-(defmethod match ((a <vector>) (b <vector>))
-  (and (eql (size a) (size b))
-       (match (vector-type a) (vector-type b))))
-
-@doc "If all other `match` methods are not appropriate, then the types are not a
-match."
-(defmethod match ((a <type>) (b <type>))
-  nil)
 
 ;; Programmer input
 
