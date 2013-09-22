@@ -26,13 +26,17 @@
   (incf (indirection type))
   type)
 
+(defclass <unit> (<type>)
+  ()
+  (:documentation "The unit type ()."))
+
 (defclass <generic-type> (<type>)
   ((type-var :accessor type-var :initarg :type-var)
    (options :accessor options :initarg :options))
   (:documentation "Represents a generic type."))
 
-(defun generic (sym)
-  (make-instance '<generic-type> :type-var sym))
+(defun generic (sym &optional opts)
+  (make-instance '<generic-type> :type-var sym :options opts))
 
 (defclass <scalar> (<type>)
   ((type
@@ -126,6 +130,9 @@
 
 ;; Some functions on types
 
+(defmethod unit? ((type <type>))
+  (typep type '<unit>))
+
 (defmethod pointer? ((type <type>))
   (> (indirection type) 1))
 
@@ -164,104 +171,118 @@
       (and (typep type '<vector>)
            (typep (vector-type type) alt))))
 
+@export
 @doc "Generate a type object from the form of a type signature."
 (defmethod parse-type (form (code <code>))
-  (if (atom form)
-    (cond
-      ((integer-constructor? form)
-         (integer-constructor? form))
-      ((float-constructor? form)
-         (scalar (float-constructor? form)))
-      (t
-        ;; A named type
-        (aif (type-exists? form code)
-             it
-             (raise form "Unknown type '~A'." form))))
+  (cond
+    ((null form)
+      +unit+)
+    ((atom form)
+      (cond
+        ((integer-constructor? form)
+           (integer-constructor? form))
+        ((float-constructor? form)
+           (scalar (float-constructor? form)))
+        (t
+          ;; A named type
+          (aif (type-exists? form code)
+               it
+               (raise form "Unknown type '~A'." form)))))
     ;; Type function
-    (case (car form)
-      (|pointer|
-        ;Increase the indirection level by one or n (integer constant)
-        (let ((type (parse-type (cadr form) code))
-              (n (aif (caddr form) it 1)))
-          (incf (indirection type) n)
-          type))
-      (|unpointer|
-        ;; Decrease indirection level by one, or n (integer constant)
-        ;; If object is not a pointer, signal an error
-        (let ((type (parse-type (cadr form) code))
-              (n (aif (caddr form) it 1)))
-          (decf (indirection type) n)
-          (if (< (indirection type) 0)
-            (raise form "Can't (unpointer) this object"))
-          (decf (indirection type))
-          type))
-      (|fn|
-        ;function pointer type: (fn retval type_1 type_2 ... type_3)
-        (let ((ret (parse-type (cadr form) code)))
-          (argtypes (mapcar #'(lambda (type) (parse-type type code) (cddr form))))
-        (make-instance '<func> :ret ret :args argtypes)))
-      (|tuple|
-        ;; (tuple type_1 type_2 ... type_3) => {type_1,type_2,...,type_3}
-        (let ((types (mapcar #'(lambda (type) (parse-type type code)) (cdr form))))
-          (aggregate types)))
-      (|structure|
-        ;;(structure (name_1 type_1) ... (name_n type_n)) => {type_1,...,type_n}
-        (let ((fields
-                (loop for field in (cdr form) collecting
-                  (cond
-                    ((atom field)
-                      (raise form "Fields in a structure must be (name type) lists, but an atom was found."))
-                    ((eql (length field) 1)
-                      (raise form "Fields in a structure must be (name type) lists, but a single-element list was found."))
-                    ((not (symbolp (car field)))
-                      (raise form "The name of a structure field must be a symbol."))
-                    (t (list (car field) (parse-type (cadr field) code)))))))
-          (make-instance '<struct>
-            :names (loop for field in fields collecting (car field))
-            :types (loop for field in fields collecting (cdr field)))))
-      (|type|
-        ; emit the code for a form, throw away everything by the type
-        (res-type (emit-code (cadr form) code)))
-      (|ret|
-        ;the return type of a function pointer
-        (let ((fn (parse-type (cadr form) code)))
-          (ret fn)))
-      (|args|
-        ;; return the argument list from a function pointer type  as a list of
-        ;;types
-        (let ((fn (parse-type (cadr form) code)))
-          (aggregate (args fn))))
-      ;Functions to excise the types of an aggregate type
-      (|nth|
-        (let ((type (parse-type (cadr form) code))
-              (n (caddr form)))
-          (nth n (types type))))
-      (|first|
-        (let ((type (parse-type (cadr form) code)))
-          (first (types type))))
-      (|last|
-        (let ((type (parse-type (cadr form) code)))
-          (first (last (types type)))))
-      (|rest|
-        (let ((type (parse-type (cadr form) code)))
-          (rest (types type))))
-      (|body|
-        (let ((type (parse-type (cadr form) code)))
-          (reverse (rest (reverse (types type))))))
-      ;; Generic types
-      (|generic|
-        ;; Define a generic type. Optionally specify a union of the types it can
-        ;; be specialized to
-        )
-      (|abstract|
-        ;; Define a generic structure
-        )
-      (t
-        ;; No type function matched: Go find a matching generic type to
-        ;; specialize
-        ))))
+    (t
+      (case (car form)
+        (|pointer|
+          ;Increase the indirection level by one or n (integer constant)
+          (let ((type (parse-type (cadr form) code))
+                (n (aif (caddr form) it 1)))
+            (incf (indirection type) n)
+            type))
+        (|unpointer|
+          ;; Decrease indirection level by one, or n (integer constant)
+          ;; If object is not a pointer, signal an error
+          (let ((type (parse-type (cadr form) code))
+                (n (aif (caddr form) it 1)))
+            (decf (indirection type) n)
+            (if (< (indirection type) 0)
+              (raise form "Can't (unpointer) this object"))
+            (decf (indirection type))
+            type))
+        (|fn|
+          ;function pointer type: (fn retval type_1 type_2 ... type_3)
+          (let ((ret (parse-type (cadr form) code)))
+            (argtypes (mapcar #'(lambda (type) (parse-type type code) (cddr form))))
+          (make-instance '<func> :ret ret :args argtypes)))
+        (|tup|
+          ;; (tup type_1 type_2 ... type_3) => {type_1,type_2,...,type_3}
+          (let ((types (mapcar #'(lambda (type) (parse-type type code)) (cdr form))))
+            (aggregate types)))
+        (|rec|
+          ;;(rec (name_1 type_1) ... (name_n type_n)) => {type_1,...,type_n}
+          (let ((fields
+                  (loop for field in (cdr form) collecting
+                    (cond
+                      ((atom field)
+                        (raise form "Fields in a structure must be (name type) lists, but an atom was found."))
+                      ((eql (length field) 1)
+                        (raise form "Fields in a structure must be (name type) lists, but a single-element list was found."))
+                      ((not (symbolp (car field)))
+                        (raise form "The name of a structure field must be a symbol."))
+                      (t (list (car field) (parse-type (cadr field) code)))))))
+            (make-instance '<struct>
+              :names (loop for field in fields collecting (car field))
+              :types (loop for field in fields collecting (cadr field)))))
+        (|type|
+          ; emit the code for a form, throw away everything by the type
+          (res-type (emit-code (cadr form) code)))
+        (|ret|
+          ;the return type of a function pointer
+          (let ((fn (parse-type (cadr form) code)))
+            (ret fn)))
+        (|args|
+          ;; return the argument list from a function pointer type  as a list of
+          ;;types
+          (let ((fn (parse-type (cadr form) code)))
+            (aggregate (args fn))))
+        ;Functions to excise the types of an aggregate type
+        (|nth|
+          (let ((type (parse-type (cadr form) code))
+                (n (caddr form)))
+            (nth n (types type))))
+        (|first|
+          (let ((type (parse-type (cadr form) code)))
+            (first (types type))))
+        (|last|
+          (let ((type (parse-type (cadr form) code)))
+            (first (last (types type)))))
+        (|rest|
+          (let ((type (parse-type (cadr form) code)))
+            (rest (types type))))
+        (|body|
+          (let ((type (parse-type (cadr form) code)))
+            (reverse (rest (reverse (types type))))))
+        ;; Abstract types
+        (|abstract|
+
+          )
+        (t
+          (if (and (eq (last-context code) :fn) (eql (car form) '|?|))
+              ;; Generic type
+              (let ((tag (nth form 1))
+                    (opts (cddr form)))
+                (generic tag
+                  (if (and (eql (length opts) 1) (listp (car opts)))
+                      ;; Options given as a list: (? Ta (i32 float))
+                      (car opts)
+                      ;; Normal options: (? Ta i32 float)
+                      opts)))
+              ;; No type function matched: Go find a matching generic type to
+              ;; specialize
+              nil))))))
 
 ;;; Emitting types into IR
+
+(defmethod print-type ((type <unit>))
+  (format nil "i1"))
 
 (defmethod print-type ((type <scalar>))
   (cond
@@ -296,6 +317,9 @@
 
 ;;; "Flat printing" of types in a way amenable to function mangling
 
+(defmethod flat-type ((type <unit>))
+  "unit")
+
 (defmethod flat-type ((type <scalar>))
   (print-type type))
 
@@ -324,6 +348,9 @@ types."
   (format nil "~A.~{~A~#[~:;. ~]~}" fn (mapcar #'print-flat args)))
 
 ;;; Type matching
+
+(defmethod match ((a <unit>) (b <unit>))
+  t)
 
 (defmethod match ((a <scalar>) (b <scalar>))
   (equal (scalar-type a) (scalar-type b)))
@@ -361,15 +388,14 @@ match."
     (raise form "A type with that name already exists.")
     (let* ((code (copy-code code))
            (type (parse-type type code)))
-      ;; Is the type generic, at any level?
-      (if (concrete? type)
-        (setf (gethash name (types code)) type)
-        (setf (gethash name (types code)) (setf (type-generic type) t)))
+      (setf (gethash name (types code)) type)
       code)))
 
 (defmethod define-generic-type (fn (code <code>)))
 
 ;; Builtins
+
+(defparameter +unit+  (make-instance '<unit>))
 
 (defparameter +byte+  (int 8))
 (defparameter +cstr+  (pointer (int 8)))
