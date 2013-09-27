@@ -8,6 +8,9 @@
 (defmacro assign-res (type value)
   `(assign (res code ,type) ,value))
 
+(defmacro emit-unit ()
+  `(assign (res code +unit+) "false"))
+
 @doc "Allocate enough space for a value on the stack."
 (defun allocate (type)
   (emit "allocate ~A" (emit-type type)))
