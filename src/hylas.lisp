@@ -26,7 +26,9 @@ variables and registers."
      :accessor    vars
      :initarg     :vars
      :initform    (make-hash-table :test #'equal))
-   (context :accessor context :initarg :context :initform :normal)))
+   (context :accessor context :initarg :context :initform :normal)
+   (generic-params :accessor generic-params
+		   :initform (make-hash-table :test #'equal))))
 
 (defun print-var (name var)
   (format nil "~S -> ~A" name var))

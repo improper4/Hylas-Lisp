@@ -89,23 +89,25 @@
      ,@code))
 
 @export
-(defmacro with-new-scope (code-state &rest code)
+(defmacro with-new-scope (code-state scope-type &rest code)
   `(let ((code (copy-code ,code-state)))
      (push (make-instance '<scope>) (stack code))
+     (setf (context (car (last (stack code)))) ,scope-type)
      ,@code))
 
 @export
 (defmacro with-function-scope (code-state &rest code)
-  `(with-new-scope ,code-state
-    (setf (context (car (last (stack code)))) :fn)
-    ,@code))
+  `(with-new-scope ,code-state :fn ,@code))
 
 @export
 (defmacro with-lambda-scope (code-state &rest code)
-  `(with-new-scope ,code-state
-    (setf (context (car (last (stack code)))) :lambda)
+  `(with-new-scope ,code-state :lambda
     (push (list nil) (lambda-contexts code))
     ,@code))
+
+@export
+(defmacro with-typedef-scope (code-state &rest code)
+  `(with-new-scope ,code-state :typedef ,@code))
 
 (defparameter *operators* (make-hash-table :test #'equal))
 (defparameter *core* (make-hash-table :test #'equal))

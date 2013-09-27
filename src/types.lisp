@@ -108,6 +108,7 @@
      :accessor signed?
      :initarg :signed?
      :initform t))
+  :doc "Integer/bitfield types"
   :print ((format nil "~A~A" (if (signed? type) "i" "ui") (width type)))
   :print-flat ((print-type type))
   :match ((eql (width a) (width b)))
@@ -186,10 +187,12 @@ aggregate'."
 (def-type <struct> (<aggregate>)
   ((names :accessor   names
     :initarg    :names
-    :initform   '())))
+    :initform   '()))
+  :doc "Like tuples, only with named fields")
 
 (def-type <abstract> (<struct>)
-  ((generic-names :accessor generic-names :initarg :generic-names)))
+  ((generic-names :accessor generic-names :initarg :generic-names))
+  :doc "Parametric types")
 
 (def-type <vector> (<type>)
   ((type
@@ -244,113 +247,119 @@ match."
 
 ;;; Parsing forms into type objects
 
+@doc "Can generic type parameters be used within the current context?"
+(defmethod generic-context? ((code <code>))
+  (or (eq (last-context code) :typedef)
+      (eq (last-context code) :fn)))
+
+(defun generic-param? (sym)
+  (and (atom sym) (char-equal (first (symbol-name sym)) #\?)))
+
 @export
 @doc "Generate a type object from the form of a type signature."
 (defmethod parse-type (form (code <code>))
   (cond
     ((null form)
-      +unit+)
+     +unit+)
     ((atom form)
-      (cond
-        ((integer-constructor? form)
-           (integer-constructor? form))
-        ((float-constructor? form)
-           (scalar (float-constructor? form)))
-        (t
-          ;; A named type
-          (aif (type-exists? form code)
-               it
-               (raise form "Unknown type '~A'." form)))))
+     (cond
+       ((integer-constructor? form)
+	(integer-constructor? form))
+       ((float-constructor? form)
+	(scalar (float-constructor? form)))
+       ((and (generic-context? code) (generic-param? form))
+	;; Universal quantification
+	(generic (intern (subseq (symbol-name form) 1))))
+       (t
+	;; A named type
+	(aif (type-exists? form code)
+	     it
+	     (raise form "Unknown type '~A'." form)))))
     ;; Type function
     (t
-      (case (car form)
-        (|pointer|
-          ;Increase the indirection level by one or n (integer constant)
-          (let ((type (parse-type (cadr form) code))
-                (n (aif (caddr form) it 1)))
-            (incf (indirection type) n)
-            type))
-        (|unpointer|
-          ;; Decrease indirection level by one, or n (integer constant)
-          ;; If object is not a pointer, signal an error
-          (let ((type (parse-type (cadr form) code))
-                (n (aif (caddr form) it 1)))
-            (decf (indirection type) n)
-            (if (< (indirection type) 0)
+     (case (car form)
+       (|pointer|
+	;Increase the indirection level by one or n (integer constant)
+	(let ((type (parse-type (cadr form) code))
+	      (n (aif (caddr form) it 1)))
+	  (incf (indirection type) n)
+	  type))
+       (|unpointer|
+	;; Decrease indirection level by one, or n (integer constant)
+	;; If object is not a pointer, signal an error
+	(let ((type (parse-type (cadr form) code))
+	      (n (aif (caddr form) it 1)))
+	  (decf (indirection type) n)
+	  (if (< (indirection type) 0)
               (raise form "Can't (unpointer) this object"))
-            (decf (indirection type))
-            type))
-        (|fn|
-          ;function pointer type: (fn retval type_1 type_2 ... type_3)
-          (let ((ret (parse-type (cadr form) code)))
-            (argtypes (mapcar #'(lambda (type) (parse-type type code) (cddr form))))
+	  (decf (indirection type))
+	  type))
+       (|fn|
+	;function pointer type: (fn retval type_1 type_2 ... type_3)
+	(let ((ret (parse-type (cadr form) code)))
+	  (argtypes (mapcar #'(lambda (type) (parse-type type code) (cddr form))))
           (make-instance '<func> :ret ret :args argtypes)))
-        (|tup|
-          ;; (tup type_1 type_2 ... type_3) => {type_1,type_2,...,type_3}
-          (let ((types (mapcar #'(lambda (type) (parse-type type code)) (cdr form))))
-            (aggregate types)))
-        (|rec|
-          ;;(rec (name_1 type_1) ... (name_n type_n)) => {type_1,...,type_n}
-          (let ((fields
-                  (loop for field in (cdr form) collecting
+       (|tup|
+	;; (tup type_1 type_2 ... type_3) => {type_1,type_2,...,type_3}
+	(let ((types (mapcar #'(lambda (type) (parse-type type code)) (cdr form))))
+	  (aggregate types)))
+       (|rec|
+	;;(rec (name_1 type_1) ... (name_n type_n)) => {type_1,...,type_n}
+	(let ((fields
+	       (loop for field in (cdr form) collecting
                     (cond
                       ((atom field)
-                        (raise form "Fields in a structure must be (name type) lists, but an atom was found."))
+		       (raise form "Fields in a structure must be (name type) lists, but an atom was found."))
                       ((eql (length field) 1)
-                        (raise form "Fields in a structure must be (name type) lists, but a single-element list was found."))
+		       (raise form "Fields in a structure must be (name type) lists, but a single-element list was found."))
                       ((not (symbolp (car field)))
-                        (raise form "The name of a structure field must be a symbol."))
+		       (raise form "The name of a structure field must be a symbol."))
                       (t (list (car field) (parse-type (cadr field) code)))))))
-            (make-instance '<struct>
-              :names (loop for field in fields collecting (car field))
-              :types (loop for field in fields collecting (cadr field)))))
-        (|type|
-          ; emit the code for a form, throw away everything by the type
-          (res-type (emit-code (cadr form) code)))
-        (|ret|
-          ;the return type of a function pointer
-          (let ((fn (parse-type (cadr form) code)))
-            (ret fn)))
-        (|args|
-          ;; return the argument list from a function pointer type  as a list of
-          ;;types
-          (let ((fn (parse-type (cadr form) code)))
-            (aggregate (args fn))))
-        ;Functions to excise the types of an aggregate type
-        (|nth|
-          (let ((type (parse-type (cadr form) code))
-                (n (caddr form)))
-            (nth n (types type))))
-        (|first|
-          (let ((type (parse-type (cadr form) code)))
-            (first (types type))))
-        (|last|
-          (let ((type (parse-type (cadr form) code)))
-            (first (last (types type)))))
-        (|rest|
-          (let ((type (parse-type (cadr form) code)))
-            (rest (types type))))
-        (|body|
-          (let ((type (parse-type (cadr form) code)))
-            (reverse (rest (reverse (types type))))))
-        ;; Abstract types
-        (|abstract|
+	  (make-instance '<struct>
+			 :names (loop for field in fields collecting (car field))
+			 :types (loop for field in fields collecting (cadr field)))))
+       (|type|
+	; emit the code for a form, throw away everything by the type
+	(res-type (emit-code (cadr form) code)))
+       (|ret|
+	;the return type of a function pointer
+	(let ((fn (parse-type (cadr form) code)))
+	  (ret fn)))
+       (|args|
+	;; return the argument list from a function pointer type  as a list of
+	;;types
+	(let ((fn (parse-type (cadr form) code)))
+	  (aggregate (args fn))))
+       ;Functions to excise the types of an aggregate type
+       (|nth|
+	(let ((type (parse-type (cadr form) code))
+	      (n (caddr form)))
+	  (nth n (types type))))
+       (|first|
+	(let ((type (parse-type (cadr form) code)))
+	  (first (types type))))
+       (|last|
+	(let ((type (parse-type (cadr form) code)))
+	  (first (last (types type)))))
+       (|rest|
+	(let ((type (parse-type (cadr form) code)))
+	  (rest (types type))))
+       (|body|
+	(let ((type (parse-type (cadr form) code)))
+	  (reverse (rest (reverse (types type))))))
+       ;; Abstract types
+       (|abstract|
 
-          )
-        (t
-          (if (and (eq (last-context code) :fn) (eql (car form) '|?|))
-              ;; Generic type
-              (let ((tag (nth form 1))
-                    (opts (cddr form)))
-                (generic tag
-                  (if (and (eql (length opts) 1) (listp (car opts)))
-                      ;; Options given as a list: (? Ta (i32 float))
-                      (car opts)
-                      ;; Normal options: (? Ta i32 float)
-                      opts)))
-              ;; No type function matched: Go find a matching generic type to
-              ;; specialize
-              nil))))))
+	)
+       (t
+	(if (and (generic-context? code) (generic-param? (first form)))
+	    ;; Generic type parameter, with kinds
+	    (let ((tag (first form))
+		  (kind (second form)))
+	      (generic tag kind))
+	    ;; No type function matched: Go find a matching abstract type to
+	    ;; specialize
+	    +unit+))))))
 
 
 ;; Programmer input
