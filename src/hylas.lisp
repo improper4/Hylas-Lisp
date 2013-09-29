@@ -28,7 +28,8 @@ variables and registers."
      :initform    (make-hash-table :test #'equal))
    (context :accessor context :initarg :context :initform :normal)
    (generic-params :accessor generic-params
-		   :initform (make-hash-table :test #'equal))))
+		   :initform (list)
+   (labels :accessors :initform (list))))
 
 (defun print-var (name var)
   (format nil "~S -> ~A" name var))
@@ -132,6 +133,9 @@ variables and registers."
     :core (copy-hash-table (core code))
     :functions (copy-hash-table (functions code))
     :types (copy-hash-table (types code))))
+
+(defmacro last-scope (code)
+  `(car (last (stack code))))
 
 @export
 (defmethod last-context ((code <code>))

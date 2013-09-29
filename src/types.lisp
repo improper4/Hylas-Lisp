@@ -365,11 +365,7 @@ match."
 ;; Programmer input
 
 (defmethod type-exists? (name (code <code>))
-  ;; Type exists checks for the existence of concrete or generic types, but not
-  ;; abstract types
-  (aif (gethash name (types code)) (not (abstract? it))))
-
-(defmethod abstract-exists? (name (code <code>)))
+  (gethash name (types code)))
 
 (defmethod define-type (name type form (code <code>))
   (if (type-exists? name code)
@@ -379,7 +375,6 @@ match."
       (setf (gethash name (types code)) type)
       code)))
 
-(defmethod define-generic-type (fn (code <code>)))
 
 ;; Builtins
 

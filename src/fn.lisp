@@ -87,7 +87,7 @@ prototypes."
                                     :tco (option? "tail" opts)
                                     :cconv (get-cconv opts))))
             (add-fn-def name fn code)
-	    (if (> (hash-table-count (generic-params (car (last (stack code)))))
+	    (if (> (length (generic-params (car (last (stack code)))))
 		   0)
 		;; Generic function
 		(emit-unit)
