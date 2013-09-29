@@ -1,0 +1,33 @@
+(module POSIX
+
+  (fn popen2 ((cmd cstr) (in (ptr word)) (out (ptr word))) pid
+    (let pin [0 0]
+	 pout [0 0]
+	 read-end 0
+	 write-end 1)
+    (if (or ¬(= 0 (pipe pin)) ¬(= 0 (pipe put)))
+      -1
+      (do
+	(let pid (fork))
+	(cond
+	  ((< pid 0)
+	    ;; Couldn't fork
+	    pid)
+	  ((= pid 0)
+	    ;; In the child
+	    (close (nth pin write-end))
+	    (dup2 (nth pin read-end) read-end)
+	    (close (nth pin read-end))
+	    (dup2 (nth pin write-end) write-end)
+	    (execl "/bin/sh" "sh" "-c" cmd (null i8))
+	    (perror "execl")
+	    (exit 1))
+	  (true
+	    ;; In the parent
+	    (flow (null? in)
+		  (close (nth pin write-end))
+		  (set in (address (nth pin write-end))))
+	    (flow (null? out)
+		  (close (nth pout read-end))
+		  (set out (address (nth pin read-end))))
+	    pid)))))
