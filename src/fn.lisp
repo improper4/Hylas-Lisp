@@ -87,10 +87,15 @@ prototypes."
                                     :tco (option? "tail" opts)
                                     :cconv (get-cconv opts))))
             (add-fn-def name fn code)
+	    (if (> (length (generic-params (car (last (stack code)))))
+		   0)
+		;; Generic function
+		(emit-unit)
+		;; Concrete function
             (append-entry
               (append-toplevel code
                 (create-function body fn ret arg-names arg-types code))
-              (assign-res (int 1) (constant (int 1) "true"))))))))
+              (emit-unit))))))))
 
 (defmethod define-generic-function (fn (code <code>)))
 

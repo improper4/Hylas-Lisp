@@ -89,23 +89,25 @@
      ,@code))
 
 @export
-(defmacro with-new-scope (code-state &rest code)
+(defmacro with-new-scope (code-state scope-type &rest code)
   `(let ((code (copy-code ,code-state)))
      (push (make-instance '<scope>) (stack code))
+     (setf (context (car (last (stack code)))) ,scope-type)
      ,@code))
 
 @export
 (defmacro with-function-scope (code-state &rest code)
-  `(with-new-scope ,code-state
-    (setf (context (car (last (stack code)))) :fn)
-    ,@code))
+  `(with-new-scope ,code-state :fn ,@code))
 
 @export
 (defmacro with-lambda-scope (code-state &rest code)
-  `(with-new-scope ,code-state
-    (setf (context (car (last (stack code)))) :lambda)
+  `(with-new-scope ,code-state :lambda
     (push (list nil) (lambda-contexts code))
     ,@code))
+
+@export
+(defmacro with-typedef-scope (code-state &rest code)
+  `(with-new-scope ,code-state :typedef ,@code))
 
 (defparameter *operators* (make-hash-table :test #'equal))
 (defparameter *core* (make-hash-table :test #'equal))
@@ -120,6 +122,9 @@
   `(defbuiltin *core*,name ,@code))
 
 ;;; Variables
+
+(defmacro extract-bindings (bindings)
+  "Parse the body of a let or set expression")-
 
 (defop def
   (let ((sym (symbol-name (nth 0 form))))
@@ -203,6 +208,10 @@
   (emit-code (make-and-form form) code))
 
 (defop do
+  (extract-list form
+    code))
+
+(defop block
   (with-new-scope code
     (extract-list form
       code)))
@@ -374,8 +383,9 @@
 
 (defop type
   (destructuring-bind (name def) form
-    (append-entry (define-type name def form code)
-      (assign (res code (int 1)) (constant (int 1) "true")))))
+    (with-typedef-scope
+	(append-entry (define-type name def form code)
+          (assign (res code (int 1)) (constant (int 1) "true"))))))
 
 (defop tuple
   "Create a tuple from its arguments.
@@ -416,7 +426,7 @@
 
 ;; Function definition and calling
 
-(defop function
+(defop fn
   (define-function form code))
 
 (defop apply
@@ -460,15 +470,7 @@
   "Define a new memory manager.")
 
 (defop address
-  "Get the address of a variable or reference.")
-(defop fn
-  "Get a pointer to a named function.")
-
-;; Software Transactional Memory primitives
-
-(defop transact
-  "Takes a list of variables and ensures they are operated on properly.
-  See the chapter on STM.")
+  "Get the address of a variable, reference or named function.")
 
 ;;; Printing
 
