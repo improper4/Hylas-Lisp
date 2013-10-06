@@ -18,4 +18,12 @@
   (is (parse-function '(name ((n i64) (m i64)) ret code))
       (list 'name '(n m) '(i64 i64) ret "" (list 'code))))|#
 
+(test concrete-functions
+  (finishes
+    (eval-string
+      "(function ((n i64)) i64 n)")
+    (eval-string
+      "(function ((n double) (m double)) double
+         (+ n m))")))
+
 (run!)
