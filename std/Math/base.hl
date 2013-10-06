@@ -1,0 +1,23 @@
+(function sign ((n Tn))
+  (if (eq n 0)
+    0
+    (if (< n 0) -1 1)))
+
+(function even? ((n Tn))
+  (if (eq (% n 2) 0) true false))
+
+(function odd? ((n Tn))
+  (not (even? n)))
+
+(function sum ((arr (pointer Ta)) (n word))
+  (def sum (nth 0 arr))
+  (loop (for i 1 n)
+    (set sum (add sum (nth i arr))))
+  sum)
+
+(function sum ((arr (pointer Ta)) (start word) (end word))
+  (def sum (nth 0 arr))
+  (loop (for i start end)
+    (set sum (add sum (nth i arr))))
+  sum)
+
