@@ -40,7 +40,7 @@ extern "C" {
         const char* error;
     };
 
-    Code* error_code(const char* desc) {
+    Code* hylas_error_code(const char* desc) {
         Code* code = new Code;
         code->error = desc;
         return code;
@@ -79,15 +79,15 @@ extern "C" {
         ParseAssemblyString(ir,code->program,errors,Context);
         Function* entryfn = code->program->getFunction(StringRef("entry"));
         if(entryfn == NULL) {
-            return error_code("ERROR: Couldn't find program entry point.");
+            return hylas_error_code("ERROR: Couldn't find program entry point.");
         }
         if(!errors.getMessage().empty()) {
             entryfn->eraseFromParent();
-            return error_code(errors.getMessage().data());
+            return hylas_error_code(errors.getMessage().data());
         }
         if(verifyModule(*code->program,ReturnStatusAction,&parser_errors)) {
             entryfn->eraseFromParent();
-            return error_code(parser_errors.data());
+            return hylas_error_code(parser_errors.data());
         }
         code->passes.run(*code->program);
         return code;
@@ -106,7 +106,7 @@ extern "C" {
     }
 
     const char* run_entry(Code* code) {
-        llvm::Function* entryfn = code->engine->FindFunctionNamed("entry");
+        Function* entryfn = code->engine->FindFunctionNamed("entry");
         if(entryfn == NULL)
           return NULL; //"Couldn't find program entry point."
         std::vector<GenericValue> args;
