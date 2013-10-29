@@ -224,11 +224,11 @@ it returns the type of the last register"
      (setf (toplevel code) (append (toplevel code) (list ,@ir)))
      code))
 
-@doc "Generate documentation for the compiler."
+#|@doc "Generate documentation for the compiler."
 (defun docgen ()
   (gendoc (:output-filename "docs/docs.html"
            :css "res/css/hylas.css")
     (:mdf "intro.md")
     (:mdf "details.md")
     (:apiref :some-package :another-package)
-    (:mdf "closing.md")))
+    (:mdf "closing.md")))|#
