@@ -28,8 +28,8 @@ variables and registers."
      :initform    (make-hash-table :test #'equal))
    (context :accessor context :initarg :context :initform :normal)
    (generic-params :accessor generic-params
-		   :initform (list)
-   (labels :accessors :initform (list))))
+		   :initform (list))
+   (labels :accessor scope-labels :initform (list))))
 
 (defun print-var (name var)
   (format nil "~S -> ~A" name var))
