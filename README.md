@@ -39,18 +39,6 @@ Hylas is a statically-typed, [wide-spectrum](http://en.wikipedia.org/wiki/Wide-s
     (unused       byte)))
 ```
 
-# Documentation
-
-Documentation on the _language_ is available as a series of [Markdown](http://daringfireball.net/projects/markdown/) files in the `docs` folder, and can be built using Make and [Pandoc](http://johnmacfarlane.net/pandoc/):
-
-```bash
-$ make book
-```
-
-This will generate the HTML files in the `docs/book/html` folder. Use `make clean` to delete them.
-
-Documentation on the _compiler_ can be generated running `make doc`.
-
 # License
 
 Copyright (C) 2012 Fernando Borretti
