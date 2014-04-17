@@ -23,15 +23,6 @@
   (:arity 1 :inline t)
   `(setf (documentation *package* t) ,text))
 
-(defun flatten (list)
-  (cond
-    ((null list)
-      nil)
-    ((atom list)
-      (list list))
-    (t
-      (loop for item in list appending (flatten item)))))
-
 (defun get-from-list (name list)
   (loop for form in list do
     (if (and (listp form) (equal (car form) name))
